@@ -1,0 +1,2 @@
+# Deterministic crawler MVP uses only the Python standard library.
+# Add langgraph later when wiring the full agent graph.

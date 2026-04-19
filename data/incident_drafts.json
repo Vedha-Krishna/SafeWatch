@@ -1,0 +1,547 @@
+[
+  {
+    "incident_id": "inc_mock_001",
+    "post_id": "mock_001",
+    "source_platform": "mock_forum",
+    "source_url": "mock://community/mock_001",
+    "raw_text": "My bicycle was stolen outside Bedok MRT last night. The lock was cut and the bike was gone when I returned.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "theft",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Bedok",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "last night",
+    "normalized_time": "2026-04-18T22:15:00+08:00",
+    "candidate_scores": {
+      "theft": 0.85
+    },
+    "matched_signals": [
+      "theft:stolen",
+      "theft:stole"
+    ],
+    "evidence_snippets": [
+      "My bicycle was stolen outside Bedok MRT last night."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_002",
+    "post_id": "mock_002",
+    "source_platform": "mock_reddit",
+    "source_url": "mock://community/mock_002",
+    "raw_text": "Someone tried opening car doors at the Tampines multistorey carpark around 8pm. They walked away when residents came down.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "attempted_theft",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Tampines",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "around 8pm",
+    "normalized_time": "2026-04-18T19:40:00+08:00",
+    "candidate_scores": {
+      "attempted_theft": 0.6
+    },
+    "matched_signals": [
+      "attempted_theft:tried opening"
+    ],
+    "evidence_snippets": [
+      "Someone tried opening car doors at the Tampines multistorey carpark around 8pm."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_003",
+    "post_id": "mock_003",
+    "source_platform": "mock_forum",
+    "source_url": "mock://community/mock_003",
+    "raw_text": "The lift lobby wall at Yishun block 218 was spray painted overnight. Fresh graffiti was still there this morning.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "vandalism",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Yishun",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "this morning",
+    "normalized_time": "2026-04-17T08:20:00+08:00",
+    "candidate_scores": {
+      "vandalism": 0.85
+    },
+    "matched_signals": [
+      "vandalism:spray painted",
+      "vandalism:graffiti"
+    ],
+    "evidence_snippets": [
+      "The lift lobby wall at Yishun block 218 was spray painted overnight.",
+      "Fresh graffiti was still there this morning."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_004",
+    "post_id": "mock_004",
+    "source_platform": "mock_social",
+    "source_url": "mock://community/mock_004",
+    "raw_text": "Suspicious person loitering near Punggol Waterway at about 11pm, peeking into parked bicycles and checking locks.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "suspicious_activity",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Punggol",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "about 11pm",
+    "normalized_time": "2026-04-16T23:05:00+08:00",
+    "candidate_scores": {
+      "suspicious_activity": 1.0
+    },
+    "matched_signals": [
+      "suspicious_activity:suspicious",
+      "suspicious_activity:loitering",
+      "suspicious_activity:peeking into"
+    ],
+    "evidence_snippets": [
+      "Suspicious person loitering near Punggol Waterway at about 11pm, peeking into parked bicycles and checking locks."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_005",
+    "post_id": "mock_005",
+    "source_platform": "mock_forum",
+    "source_url": "mock://community/mock_005",
+    "raw_text": "A man followed me from Orchard MRT to the bus stop tonight and kept bothering me even after I said no.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "harassment",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Orchard",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "tonight",
+    "normalized_time": "2026-04-15T21:10:00+08:00",
+    "candidate_scores": {
+      "harassment": 0.85
+    },
+    "matched_signals": [
+      "harassment:followed me",
+      "harassment:kept bothering"
+    ],
+    "evidence_snippets": [
+      "A man followed me from Orchard MRT to the bus stop tonight and kept bothering me even after I said no."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_006",
+    "post_id": "mock_006",
+    "source_platform": "mock_reddit",
+    "source_url": "mock://community/mock_006",
+    "raw_text": "Be careful everyone, stay safe out there. Heard something happened somewhere in the east.",
+    "candidate": false,
+    "short_reason": "Rejected by vague warning rule.",
+    "category": null,
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": null,
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "2026-04-15T12:30:00+08:00",
+    "normalized_time": "2026-04-15T12:30:00+08:00",
+    "candidate_scores": {},
+    "matched_signals": [],
+    "evidence_snippets": [],
+    "status": "rejected",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made.",
+      "Matched rejection rule: vague_warning."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_007",
+    "post_id": "mock_007",
+    "source_platform": "mock_social",
+    "source_url": "mock://community/mock_007",
+    "raw_text": "Haha my lunch disappeared from the office fridge, crime of the century lol.",
+    "candidate": false,
+    "short_reason": "Rejected by joke or meme rule.",
+    "category": null,
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": null,
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "2026-04-14T18:00:00+08:00",
+    "normalized_time": "2026-04-14T18:00:00+08:00",
+    "candidate_scores": {},
+    "matched_signals": [],
+    "evidence_snippets": [],
+    "status": "rejected",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made.",
+      "Matched rejection rule: joke_or_meme."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_008",
+    "post_id": "mock_008",
+    "source_platform": "mock_forum",
+    "source_url": "mock://community/mock_008",
+    "raw_text": "Train delay at Jurong East again this morning. The platform was packed and announcements were unclear.",
+    "candidate": false,
+    "short_reason": "Rejected by non crime complaint rule.",
+    "category": null,
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Jurong East",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "this morning",
+    "normalized_time": "2026-04-14T08:15:00+08:00",
+    "candidate_scores": {},
+    "matched_signals": [],
+    "evidence_snippets": [],
+    "status": "rejected",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made.",
+      "Matched rejection rule: non_crime_complaint."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_009",
+    "post_id": "mock_009",
+    "source_platform": "mock_reddit",
+    "source_url": "mock://community/mock_009",
+    "raw_text": "Someone snatched a phone from a table at the Chinatown food court around 8:30pm and ran toward the exit.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "theft",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Chinatown",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "around 8:30pm",
+    "normalized_time": "2026-04-13T20:45:00+08:00",
+    "candidate_scores": {
+      "theft": 0.6
+    },
+    "matched_signals": [
+      "theft:snatched"
+    ],
+    "evidence_snippets": [
+      "Someone snatched a phone from a table at the Chinatown food court around 8:30pm and ran toward the exit."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_010",
+    "post_id": "mock_010",
+    "source_platform": "mock_forum",
+    "source_url": "mock://community/mock_010",
+    "raw_text": "I think crime is getting worse everywhere and people nowadays have no manners.",
+    "candidate": false,
+    "short_reason": "Rejected by general opinion rule.",
+    "category": null,
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": null,
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "2026-04-13T17:50:00+08:00",
+    "normalized_time": "2026-04-13T17:50:00+08:00",
+    "candidate_scores": {},
+    "matched_signals": [],
+    "evidence_snippets": [],
+    "status": "rejected",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made.",
+      "Matched rejection rule: general_opinion."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_011",
+    "post_id": "mock_011",
+    "source_platform": "mock_social",
+    "source_url": "mock://community/mock_011",
+    "raw_text": "At Hougang void deck last night, someone scratched three parked bicycles and damaged the baskets.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "vandalism",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Hougang",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "last night",
+    "normalized_time": "2026-04-12T22:25:00+08:00",
+    "candidate_scores": {
+      "vandalism": 0.85
+    },
+    "matched_signals": [
+      "vandalism:scratched",
+      "vandalism:damaged"
+    ],
+    "evidence_snippets": [
+      "At Hougang void deck last night, someone scratched three parked bicycles and damaged the baskets."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_012",
+    "post_id": "mock_012",
+    "source_platform": "mock_forum",
+    "source_url": "mock://community/mock_012",
+    "raw_text": "A stranger was filming units and tailgating residents into a Clementi condo this afternoon.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "suspicious_activity",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Clementi",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "this afternoon",
+    "normalized_time": "2026-04-12T16:35:00+08:00",
+    "candidate_scores": {
+      "suspicious_activity": 0.85
+    },
+    "matched_signals": [
+      "suspicious_activity:filming units",
+      "suspicious_activity:tailgating"
+    ],
+    "evidence_snippets": [
+      "A stranger was filming units and tailgating residents into a Clementi condo this afternoon."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_013",
+    "post_id": "mock_013",
+    "source_platform": "mock_reddit",
+    "source_url": "mock://community/mock_013",
+    "raw_text": "My wallet was taken from my bag at Bugis around 9am while I was buying breakfast.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "theft",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Bugis",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "around 9am",
+    "normalized_time": "2026-04-11T09:25:00+08:00",
+    "candidate_scores": {
+      "theft": 0.6
+    },
+    "matched_signals": [
+      "theft:taken from"
+    ],
+    "evidence_snippets": [
+      "My wallet was taken from my bag at Bugis around 9am while I was buying breakfast."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_014",
+    "post_id": "mock_014",
+    "source_platform": "mock_social",
+    "source_url": "mock://community/mock_014",
+    "raw_text": "My wallet was taken from my bag at Bugis around 9am while I was buying breakfast.",
+    "candidate": false,
+    "short_reason": "Rejected as a duplicate or near-identical mock post.",
+    "category": null,
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Bugis",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "around 9am",
+    "normalized_time": "2026-04-11T09:30:00+08:00",
+    "candidate_scores": {
+      "theft": 0.6
+    },
+    "matched_signals": [
+      "theft:taken from"
+    ],
+    "evidence_snippets": [],
+    "status": "rejected_duplicate",
+    "duplicate_of": "inc_mock_013",
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made.",
+      "Duplicate detection matched normalized post text."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_015",
+    "post_id": "mock_015",
+    "source_platform": "mock_forum",
+    "source_url": "mock://community/mock_015",
+    "raw_text": "Someone was trying to steal parcels outside a Sengkang flat at about 11:45pm but left when the corridor light turned on.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "attempted_theft",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Sengkang",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "about 11:45pm",
+    "normalized_time": "2026-04-10T23:55:00+08:00",
+    "candidate_scores": {
+      "attempted_theft": 0.6
+    },
+    "matched_signals": [
+      "attempted_theft:trying to steal"
+    ],
+    "evidence_snippets": [
+      "Someone was trying to steal parcels outside a Sengkang flat at about 11:45pm but left when the corridor light turned on."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_016",
+    "post_id": "mock_016",
+    "source_platform": "mock_reddit",
+    "source_url": "mock://community/mock_016",
+    "raw_text": "Reported by police: shop theft case at Toa Payoh was already in the news today.",
+    "candidate": false,
+    "short_reason": "Rejected by official or mainstream rule.",
+    "category": null,
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Toa Payoh",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "today",
+    "normalized_time": "2026-04-10T14:10:00+08:00",
+    "candidate_scores": {
+      "theft": 0.6
+    },
+    "matched_signals": [
+      "theft:theft"
+    ],
+    "evidence_snippets": [],
+    "status": "rejected",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made.",
+      "Matched rejection rule: official_or_mainstream."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_017",
+    "post_id": "mock_017",
+    "source_platform": "mock_social",
+    "source_url": "mock://community/mock_017",
+    "raw_text": "A group shouted at and threatened a teenager near Serangoon bus interchange around 9pm.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "harassment",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Serangoon",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "around 9pm",
+    "normalized_time": "2026-04-09T21:20:00+08:00",
+    "candidate_scores": {
+      "harassment": 0.85
+    },
+    "matched_signals": [
+      "harassment:threatened",
+      "harassment:shouted at"
+    ],
+    "evidence_snippets": [
+      "A group shouted at and threatened a teenager near Serangoon bus interchange around 9pm."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  },
+  {
+    "incident_id": "inc_mock_018",
+    "post_id": "mock_018",
+    "source_platform": "mock_forum",
+    "source_url": "mock://community/mock_018",
+    "raw_text": "Someone broke the side mirror of a parked van at Woodlands carpark this morning.",
+    "candidate": true,
+    "short_reason": "Post contains a specific incident signal.",
+    "category": "vandalism",
+    "severity": null,
+    "authenticity_score": null,
+    "location_text": "Woodlands",
+    "latitude": null,
+    "longitude": null,
+    "timestamp_text": "this morning",
+    "normalized_time": "2026-04-09T07:40:00+08:00",
+    "candidate_scores": {
+      "vandalism": 0.6
+    },
+    "matched_signals": [
+      "vandalism:broke the"
+    ],
+    "evidence_snippets": [
+      "Someone broke the side mirror of a parked van at Woodlands carpark this morning."
+    ],
+    "status": "candidate",
+    "duplicate_of": null,
+    "agent_notes": [
+      "Crawler used deterministic keyword rules; no LLM call was made."
+    ]
+  }
+]
