@@ -1,0 +1,128 @@
+[
+  {
+    "post_id": "mock_001",
+    "platform": "mock_forum",
+    "source_url": "mock://community/mock_001",
+    "timestamp": "2026-04-18T22:15:00+08:00",
+    "text": "My bicycle was stolen outside Bedok MRT last night. The lock was cut and the bike was gone when I returned."
+  },
+  {
+    "post_id": "mock_002",
+    "platform": "mock_reddit",
+    "source_url": "mock://community/mock_002",
+    "timestamp": "2026-04-18T19:40:00+08:00",
+    "text": "Someone tried opening car doors at the Tampines multistorey carpark around 8pm. They walked away when residents came down."
+  },
+  {
+    "post_id": "mock_003",
+    "platform": "mock_forum",
+    "source_url": "mock://community/mock_003",
+    "timestamp": "2026-04-17T08:20:00+08:00",
+    "text": "The lift lobby wall at Yishun block 218 was spray painted overnight. Fresh graffiti was still there this morning."
+  },
+  {
+    "post_id": "mock_004",
+    "platform": "mock_social",
+    "source_url": "mock://community/mock_004",
+    "timestamp": "2026-04-16T23:05:00+08:00",
+    "text": "Suspicious person loitering near Punggol Waterway at about 11pm, peeking into parked bicycles and checking locks."
+  },
+  {
+    "post_id": "mock_005",
+    "platform": "mock_forum",
+    "source_url": "mock://community/mock_005",
+    "timestamp": "2026-04-15T21:10:00+08:00",
+    "text": "A man followed me from Orchard MRT to the bus stop tonight and kept bothering me even after I said no."
+  },
+  {
+    "post_id": "mock_006",
+    "platform": "mock_reddit",
+    "source_url": "mock://community/mock_006",
+    "timestamp": "2026-04-15T12:30:00+08:00",
+    "text": "Be careful everyone, stay safe out there. Heard something happened somewhere in the east."
+  },
+  {
+    "post_id": "mock_007",
+    "platform": "mock_social",
+    "source_url": "mock://community/mock_007",
+    "timestamp": "2026-04-14T18:00:00+08:00",
+    "text": "Haha my lunch disappeared from the office fridge, crime of the century lol."
+  },
+  {
+    "post_id": "mock_008",
+    "platform": "mock_forum",
+    "source_url": "mock://community/mock_008",
+    "timestamp": "2026-04-14T08:15:00+08:00",
+    "text": "Train delay at Jurong East again this morning. The platform was packed and announcements were unclear."
+  },
+  {
+    "post_id": "mock_009",
+    "platform": "mock_reddit",
+    "source_url": "mock://community/mock_009",
+    "timestamp": "2026-04-13T20:45:00+08:00",
+    "text": "Someone snatched a phone from a table at the Chinatown food court around 8:30pm and ran toward the exit."
+  },
+  {
+    "post_id": "mock_010",
+    "platform": "mock_forum",
+    "source_url": "mock://community/mock_010",
+    "timestamp": "2026-04-13T17:50:00+08:00",
+    "text": "I think crime is getting worse everywhere and people nowadays have no manners."
+  },
+  {
+    "post_id": "mock_011",
+    "platform": "mock_social",
+    "source_url": "mock://community/mock_011",
+    "timestamp": "2026-04-12T22:25:00+08:00",
+    "text": "At Hougang void deck last night, someone scratched three parked bicycles and damaged the baskets."
+  },
+  {
+    "post_id": "mock_012",
+    "platform": "mock_forum",
+    "source_url": "mock://community/mock_012",
+    "timestamp": "2026-04-12T16:35:00+08:00",
+    "text": "A stranger was filming units and tailgating residents into a Clementi condo this afternoon."
+  },
+  {
+    "post_id": "mock_013",
+    "platform": "mock_reddit",
+    "source_url": "mock://community/mock_013",
+    "timestamp": "2026-04-11T09:25:00+08:00",
+    "text": "My wallet was taken from my bag at Bugis around 9am while I was buying breakfast."
+  },
+  {
+    "post_id": "mock_014",
+    "platform": "mock_social",
+    "source_url": "mock://community/mock_014",
+    "timestamp": "2026-04-11T09:30:00+08:00",
+    "text": "My wallet was taken from my bag at Bugis around 9am while I was buying breakfast."
+  },
+  {
+    "post_id": "mock_015",
+    "platform": "mock_forum",
+    "source_url": "mock://community/mock_015",
+    "timestamp": "2026-04-10T23:55:00+08:00",
+    "text": "Someone was trying to steal parcels outside a Sengkang flat at about 11:45pm but left when the corridor light turned on."
+  },
+  {
+    "post_id": "mock_016",
+    "platform": "mock_reddit",
+    "source_url": "mock://community/mock_016",
+    "timestamp": "2026-04-10T14:10:00+08:00",
+    "text": "Reported by police: shop theft case at Toa Payoh was already in the news today."
+  },
+  {
+    "post_id": "mock_017",
+    "platform": "mock_social",
+    "source_url": "mock://community/mock_017",
+    "timestamp": "2026-04-09T21:20:00+08:00",
+    "text": "A group shouted at and threatened a teenager near Serangoon bus interchange around 9pm."
+  },
+  {
+    "post_id": "mock_018",
+    "platform": "mock_forum",
+    "source_url": "mock://community/mock_018",
+    "timestamp": "2026-04-09T07:40:00+08:00",
+    "text": "Someone broke the side mirror of a parked van at Woodlands carpark this morning."
+  }
+]
