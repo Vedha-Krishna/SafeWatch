@@ -1,0 +1,14 @@
+{
+  "incident_id": "001",
+  "source_platform": "reddit",
+  "source_url": "https://example.com/post1",
+  "raw_text": "Saw someone snatch a phone near Bugis MRT around 8pm.",
+  "category": null,
+  "authenticity_score": null,
+  "severity": null,
+  "location": null,
+  "time": null,
+  "action": null,
+  "decision": null,
+  "agent_notes": null
+}
