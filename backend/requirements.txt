@@ -1,0 +1,9 @@
+langgraph
+langchain
+langchain-core
+langchain-huggingface
+huggingface-hub
+python-dotenv
+fastapi
+uvicorn[standard]
+supabase

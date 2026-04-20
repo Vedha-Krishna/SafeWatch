@@ -5,7 +5,12 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-from agents.crawler_agent import load_posts, process_posts
+try:
+    # Running as package: python -m uvicorn backend.main:app
+    from .agents.crawler.deterministic import load_posts, process_posts
+except ImportError:
+    # Running from backend/: python -m uvicorn main:app
+    from agents.crawler.deterministic import load_posts, process_posts
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_PATH = PROJECT_ROOT / "data" / "sample_posts.json"
