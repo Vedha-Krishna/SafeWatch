@@ -1,6 +1,6 @@
 import json
 from typing import TypedDict, Optional, List
-from langgraph.graph import stateGraph, START, END
+from langgraph.graph import StateGraph, START, END
 from IPython.display import Image, display
 from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 
@@ -215,7 +215,7 @@ def edge_after_decision(state: State) -> dict:
 # 6. BUILD GRAPH
 # =========================================================
 ## state JSON
-graph_builder = stateGraph(State)
+graph_builder = StateGraph(State)
 
 ## NODES
 graph_builder.add_node("crawler", crawler_node)
@@ -243,11 +243,84 @@ graph = graph_builder.compile()
 
 # print("Saved as graph.png")
 
-with open("data/mock_posts.json", "r", encoding="utf-8") as f:
-    mock_posts = json.load(f)
 
-initial_state = mock_posts
 
-result = graph.invoke(initial_state)
 
-print(result)
+# =========================================================
+# 7. HELPER: PREPARE INITIAL STATE
+# ---------------------------------------------------------
+# Your JSON file only needs to store raw/mock data.
+# This function fills in the empty runtime fields.
+# =========================================================
+def prepare_initial_state(post: dict) -> State:
+    return {
+        "incident_id": post["incident_id"],
+        "source_platform": post["source_platform"],
+        "source_url": post["source_url"],
+        "raw_text": post["raw_text"],
+
+        "location": None,
+        "time": None,
+        "action": None,
+
+        "category": None,
+        "authenticity_score": None,
+        "severity": None,
+
+        "decision": None,
+
+        "agent_notes": [],
+        "revision_count": 0,
+    }
+
+
+
+# =========================================================
+# 8. RUN ONE POST THROUGH THE PIPELINE
+# ---------------------------------------------------------
+# We manually handle 1 retry cycle by reinvoking if needed.
+# This keeps the behavior very explicit and easy to learn.
+# =========================================================
+def run_pipeline_for_1_post(post: dict) -> State:
+    state = prepare_initial_state(post)
+
+    # First run
+    result = graph.invoke(state)
+
+    # If revision is needed, increment revision_count and run again
+    if result["decision"] == "needs_revision":
+        result["revision_count"] += 1
+        result = graph.invoke(result)
+
+    return result
+
+
+# =========================================================
+# 9. MAIN
+# ---------------------------------------------------------
+# Load mock posts, run each one, print results.
+# =========================================================
+if __name__ == "__main__":
+    with open("data/mock_posts.json", "r", encoding="utf-8") as f:
+        mock_posts = json.load(f)
+
+    all_results = []
+
+    for post in mock_posts:
+        final_state = run_pipeline_for_1_post(post)
+        all_results.append(final_state)
+
+    print("\n=== FINAL RESULTS ===\n")
+    for result in all_results:
+        print(f"Incident ID: {result['incident_id']}")
+        print(f"Decision: {result['decision']}")
+        print(f"Category: {result['category']}")
+        print(f"Authenticity: {result['authenticity_score']}")
+        print(f"Severity: {result['severity']}")
+        print(f"Location: {result['location']}")
+        print(f"Time: {result['time']}")
+        print(f"Action: {result['action']}")
+        print("Agent Notes:")
+        for note in result["agent_notes"]:
+            print(f"  - {note}")
+        print("-" * 50)
