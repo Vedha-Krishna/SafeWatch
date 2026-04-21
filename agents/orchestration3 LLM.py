@@ -4,6 +4,12 @@ from langgraph.graph import StateGraph, START, END
 from IPython.display import Image, display
 from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 
+from dotenv import load_dotenv
+import os
+load_dotenv()
+
+from openai import OpenAI
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # =========================================================
@@ -144,43 +150,212 @@ def classifier_node(state: State) -> dict:
         category = "break-in"
         severity = 0.9
 
-    # MOCK LLM REASONING (CORE SIMULATION)
-    # Simulates classifier "rethinking" based on feedback from another agent
+    # ACTUAL LLM REASONING (CORE)
+    # Classifier re-evaluates classification using feedback from Decision Agent
     if feedback_msgs:
-        if category == "unknown":
-            category = "suspicious"
+        prompt = f"""
+        You are a unreported petty crime classification agent for Singapore.
 
-    # ---------- Authenticity Score ----------
-    # MOCK: Rule-based scoring (simulating confidence calculation)
-    score = 0.0
+        Text:
+        {state["raw_text"]}
 
-    if location:
-        score += 0.25
-    if time:
-        score += 0.25
-    if action:
-        score += 0.25
+        Current classification:
+        category = {category}
 
-    eyewitness_terms = ["saw", "someone", "near", "around"]
-    if any(term in text for term in eyewitness_terms):
-        score += 0.15
+        Feedback:
+        {feedback_msgs}
 
-    concrete_terms = ["phone", "wallet", "shop", "station", "mrt", "bike"]
-    if any(term in text for term in concrete_terms):
-        score += 0.10
+        Re-evaluate the category and give a better classification.
 
-    authenticity_score = round(min(score, 1.0), 2)
+        Respond ONLY in JSON:
+        {{
+            "category": "...",
+            "reasoning": "..."
+        }}
+        """
 
-    # MOCK LLM REASONING (SECONDARY EFFECT)
-    # Simulates increased confidence after "re-evaluation"
-    if feedback_msgs:
-        authenticity_score = min(authenticity_score + 0.15, 1.0)
+        # Capture LLM Response
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    # MOCK: Agent explaining its reasoning (instead of real LLM explanation)
-    ## Message for next agent
+        # LLM JSON TO DICT
+        raw = response.choices[0].message.content #GET RAW RESPONSE
+
+        raw = raw.replace("```json", "").replace("```", "").strip() #CLEAN
+
+        try:
+            result = json.loads(raw)
+
+            if "category" not in result:
+                raise ValueError
+            
+        except json.JSONDecodeError:
+            result = {
+                "category": category,  # fallback to previous
+                "reasoning": "LLM output invalid, fallback used"
+    }
+
+        category = result["category"]
+
+        state["messages"].append({
+            "agent": "classifier",
+            "llm_reasoning": result["reasoning"]
+        })
+
+
+
+    # ---------- AUTHENTICITY SCORE ----------
+    # LLM-as-a-Judge (RUBRIC-BASED FEATURE EXTRACTION)
+    prompt = f"""
+    You are evaluating a petty crime report using a scoring rubric.
+
+    Text:
+    {state["raw_text"]}
+
+    Extract whether the following features are present (true/false):
+
+    DETAIL SPECIFICITY:
+    - specific_location
+    - specific_time
+    - specific_action
+    - object_or_person
+    - consequence
+
+    EVIDENCE QUALITY:
+    - firsthand_report
+    - clear_description
+    - media_mentioned
+    - source_link
+    - follow_up_details
+
+    CONSISTENCY:
+    - no_contradictions
+    - time_location_action_align
+    - category_matches
+    - no_exaggeration
+
+    RISK FLAGS:
+    - rumor_language
+    - missing_location
+    - missing_time
+    - ragebait
+    - contradiction
+
+    Return ONLY JSON:
+    {{
+        "specific_location": true/false,
+        "specific_time": true/false,
+        "specific_action": true/false,
+        "object_or_person": true/false,
+        "consequence": true/false,
+
+        "firsthand_report": true/false,
+        "clear_description": true/false,
+        "media_mentioned": true/false,
+        "source_link": true/false,
+        "follow_up_details": true/false,
+
+        "no_contradictions": true/false,
+        "time_location_action_align": true/false,
+        "category_matches": true/false,
+        "no_exaggeration": true/false,
+
+        "rumor_language": true/false,
+        "missing_location": true/false,
+        "missing_time": true/false,
+        "ragebait": true/false,
+        "contradiction": true/false
+    }}
+    """
+
+    # LLM extracts features based on the above
+    # Call LLM for rubric extraction
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    raw = response.choices[0].message.content
+
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
+    try:
+        features = json.loads(raw)
+
+        # Basic Validation
+        if not isinstance(features, dict):
+            raise ValueError
+
+    except json.JSONDecodeError:
+        features = {}
+
+        state["messages"].append({
+            "agent": "classifier",
+            "reasoning": "LLM feature extraction failed, fallback used",
+            "raw_output": raw
+        })
+
+    # Log successful extraction 
     state["messages"].append({
         "agent": "classifier",
-        "note": f"location={location}, time={time}, action={action}, category={category}, authenticity={authenticity_score}"
+        "reasoning": "Rubric-based feature extraction completed",
+        "features": features
+    })
+    
+
+    # SCORE THE POST
+    # DETAIL SPECIFICITY
+    detail = (
+        0.25 * features.get("specific_location", 0) +
+        0.20 * features.get("specific_time", 0) +
+        0.25 * features.get("specific_action", 0) +
+        0.20 * features.get("object_or_person", 0) +
+        0.10 * features.get("consequence", 0)
+    )
+
+    # EVIDENCE QUALITY
+    evidence = (
+        0.30 * features.get("firsthand_report", 0) +
+        0.20 * features.get("clear_description", 0) +
+        0.25 * features.get("media_mentioned", 0) +
+        0.15 * features.get("source_link", 0) +
+        0.10 * features.get("follow_up_details", 0)
+    )
+
+    # CONSISTENCY
+    consistency = (
+        0.40 * features.get("no_contradictions", 0) +
+        0.30 * features.get("time_location_action_align", 0) +
+        0.20 * features.get("category_matches", 0) +
+        0.10 * features.get("no_exaggeration", 0)
+    )
+
+    # RISK FLAGS
+    risk = (
+        0.25 * features.get("rumor_language", 0) +
+        0.20 * features.get("missing_location", 0) +
+        0.15 * features.get("missing_time", 0) +
+        0.20 * features.get("ragebait", 0) +
+        0.20 * features.get("contradiction", 0)
+    )
+
+    # FINAL SCORE
+    authenticity_score = (
+        0.25 * detail +
+        0.25 * evidence +
+        0.15 * consistency -
+        0.20 * risk
+    )
+
+    authenticity_score = max(0, min(authenticity_score, 1))
+
+    # Log Reasoning
+    state["messages"].append({
+    "agent": "classifier",
+    "reasoning": "Rubric-based evaluation applied",
+    "features": features
     })
 
     return {
@@ -191,7 +366,7 @@ def classifier_node(state: State) -> dict:
         "authenticity_score": authenticity_score,
         "severity": severity,
         "messages": state["messages"]
-    }
+        }
 
 
 
@@ -358,7 +533,7 @@ if __name__ == "__main__":
         print(f"Location: {result['location']}")
         print(f"Time: {result['time']}")
         print(f"Action: {result['action']}")
-        print("Agent Notes:")
+        print("Agent Messages:")
         for note in result["messages"]:
             print(f"  - {note}")
         print("-" * 50)
