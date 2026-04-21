@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import json
 import re
@@ -5,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_INPUT_PATH = PROJECT_ROOT / "data" / "sample_posts.json"
 DEFAULT_OUTPUT_PATH = PROJECT_ROOT / "data" / "incident_drafts.json"
 

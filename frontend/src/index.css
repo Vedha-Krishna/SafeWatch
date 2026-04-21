@@ -1,0 +1,638 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-card-border: hsl(var(--card-border));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-popover-border: hsl(var(--popover-border));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-primary-border: var(--primary-border);
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-secondary-border: var(--secondary-border);
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-muted-border: var(--muted-border);
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-accent-border: var(--accent-border);
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-destructive-border: var(--destructive-border);
+
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
+
+  --color-sidebar: hsl(var(--sidebar));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-primary-border: var(--sidebar-primary-border);
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-accent-border: var(--sidebar-accent-border);
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+
+  --font-sans: var(--app-font-sans);
+  --font-serif: var(--app-font-serif);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* LIGHT MODE */
+:root {
+  --button-outline: rgba(0,0,0, .10);
+  --badge-outline: rgba(0,0,0, .05);
+
+  --opaque-button-border-intensity: -8;
+
+  --elevate-1: rgba(0,0,0, .03);
+  --elevate-2: rgba(0,0,0, .08);
+
+  --background: 223 39% 98%;
+  --foreground: 223 39% 7%;
+  --border: 215 28% 85%;
+  --card: 0 0% 100%;
+  --card-foreground: 223 39% 7%;
+  --card-border: 215 28% 90%;
+  
+  --popover: 0 0% 100%;
+  --popover-foreground: 223 39% 7%;
+  --popover-border: 215 28% 90%;
+
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 215 20% 90%;
+  --secondary-foreground: 223 39% 7%;
+
+  --muted: 215 20% 93%;
+  --muted-foreground: 215 20% 40%;
+
+  --accent: 160 84% 39%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --input: 215 28% 85%;
+  --ring: 217 91% 60%;
+  
+  --chart-1: 217 91% 60%;
+  --chart-2: 160 84% 39%;
+  --chart-3: 45 93% 47%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 0 84% 60%;
+
+  --sidebar: 223 39% 98%;
+  --sidebar-foreground: 223 39% 7%;
+  --sidebar-border: 215 28% 85%;
+  --sidebar-primary: 217 91% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 215 20% 90%;
+  --sidebar-accent-foreground: 223 39% 7%;
+  --sidebar-ring: 217 91% 60%;
+
+  --app-font-sans: 'DM Sans', sans-serif;
+  --app-font-serif: Georgia, serif;
+  --app-font-mono: 'JetBrains Mono', monospace;
+  --radius: 0.5rem;
+  --shadow-2xs: 0px 2px 0px 0px rgba(0,0,0,0.02);
+  --shadow-xs: 0px 2px 0px 0px rgba(0,0,0,0.05);
+  --shadow-sm: 0px 2px 0px 0px rgba(0,0,0,0.05), 0px 1px 2px -1px rgba(0,0,0,0.05);
+  --shadow: 0px 2px 0px 0px rgba(0,0,0,0.05), 0px 1px 2px -1px rgba(0,0,0,0.05);
+  --shadow-md: 0px 2px 0px 0px rgba(0,0,0,0.05), 0px 2px 4px -1px rgba(0,0,0,0.05);
+  --shadow-lg: 0px 2px 0px 0px rgba(0,0,0,0.05), 0px 4px 6px -1px rgba(0,0,0,0.05);
+  --shadow-xl: 0px 2px 0px 0px rgba(0,0,0,0.05), 0px 8px 10px -1px rgba(0,0,0,0.05);
+  --shadow-2xl: 0px 2px 0px 0px rgba(0,0,0,0.05);
+  --tracking-normal: 0em;
+  --spacing: 0.25rem;
+
+  --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --sidebar-accent-border: hsl(from hsl(var(--sidebar-accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --primary-border: hsl(from hsl(var(--primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --secondary-border: hsl(from hsl(var(--secondary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --muted-border: hsl(from hsl(var(--muted)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --accent-border: hsl(from hsl(var(--accent)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+  --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
+}
+
+.dark {
+  --button-outline: rgba(255,255,255, .10);
+  --badge-outline: rgba(255,255,255, .05);
+
+  --opaque-button-border-intensity: 9;
+
+  --elevate-1: rgba(255,255,255, .04);
+  --elevate-2: rgba(255,255,255, .09);
+
+  --background: 223 39% 7%;
+  --foreground: 210 40% 98%;
+  --border: 215 28% 17%;
+  --card: 222 47% 11%;
+  --card-foreground: 210 40% 98%;
+  --card-border: 215 28% 17%;
+  
+  --popover: 222 47% 11%;
+  --popover-foreground: 210 40% 98%;
+  --popover-border: 215 28% 17%;
+
+  --primary: 217 91% 60%;
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 215 32% 17%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 215 32% 17%;
+  --muted-foreground: 215 20% 65%;
+
+  --accent: 160 84% 39%;
+  --accent-foreground: 0 0% 100%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+
+  --input: 215 28% 17%;
+  --ring: 217 91% 60%;
+  
+  --chart-1: 217 91% 60%;
+  --chart-2: 160 84% 39%;
+  --chart-3: 45 93% 47%;
+  --chart-4: 280 65% 60%;
+  --chart-5: 0 84% 60%;
+
+  --sidebar: 222 47% 11%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-border: 215 28% 17%;
+  --sidebar-primary: 217 91% 60%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 215 32% 17%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-ring: 217 91% 60%;
+
+  --shadow-2xs: 0px 2px 0px 0px rgba(0,0,0,0.2);
+  --shadow-xs: 0px 2px 0px 0px rgba(0,0,0,0.2);
+  --shadow-sm: 0px 2px 0px 0px rgba(0,0,0,0.2), 0px 1px 2px -1px rgba(0,0,0,0.2);
+  --shadow: 0px 2px 0px 0px rgba(0,0,0,0.2), 0px 1px 2px -1px rgba(0,0,0,0.2);
+  --shadow-md: 0px 2px 0px 0px rgba(0,0,0,0.2), 0px 2px 4px -1px rgba(0,0,0,0.2);
+  --shadow-lg: 0px 2px 0px 0px rgba(0,0,0,0.2), 0px 4px 6px -1px rgba(0,0,0,0.2);
+  --shadow-xl: 0px 2px 0px 0px rgba(0,0,0,0.2), 0px 8px 10px -1px rgba(0,0,0,0.2);
+  --shadow-2xl: 0px 2px 0px 0px rgba(0,0,0,0.2);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply font-sans antialiased bg-background text-foreground selection:bg-primary/30 selection:text-primary-foreground;
+  }
+}
+
+@layer utilities {
+  input[type="search"]::-webkit-search-cancel-button { @apply hidden; }
+  [contenteditable][data-placeholder]:empty::before {
+    content: attr(data-placeholder);
+    color: hsl(var(--muted-foreground));
+    pointer-events: none;
+  }
+  .toggle-elevate::before, .toggle-elevate-2::before {
+    content: ""; pointer-events: none; position: absolute; inset: 0px; border-radius: inherit; z-index: -1;
+  }
+  .toggle-elevate.toggle-elevated::before { background-color: var(--elevate-2); }
+  .border.toggle-elevate::before { inset: -1px; }
+  .hover-elevate:not(.no-default-hover-elevate), .active-elevate:not(.no-default-active-elevate), .hover-elevate-2:not(.no-default-hover-elevate), .active-elevate-2:not(.no-default-active-elevate) {
+    position: relative; z-index: 0;
+  }
+  .hover-elevate:not(.no-default-hover-elevate)::after, .active-elevate:not(.no-default-active-elevate)::after, .hover-elevate-2:not(.no-default-hover-elevate)::after, .active-elevate-2:not(.no-default-active-elevate)::after {
+    content: ""; pointer-events: none; position: absolute; inset: 0px; border-radius: inherit; z-index: 999;
+  }
+  .hover-elevate:hover:not(.no-default-hover-elevate)::after, .active-elevate:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-1);
+  }
+  .hover-elevate-2:hover:not(.no-default-hover-elevate)::after, .active-elevate-2:active:not(.no-default-active-elevate)::after {
+    background-color: var(--elevate-2);
+  }
+  .border.hover-elevate:not(.no-hover-interaction-elevate)::after, .border.active-elevate:not(.no-active-interaction-elevate)::after, .border.hover-elevate-2:not(.no-hover-interaction-elevate)::after, .border.active-elevate-2:not(.no-active-interaction-elevate)::after, .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
+    inset: -1px;
+  }
+
+  /* Custom utility classes for the dashboard */
+  .mesh-grid {
+    background-image: linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  
+  .glass-panel {
+    @apply bg-card/60 backdrop-blur-md border border-white/10;
+  }
+}
+
+/* SafeWatch — pulse and leaflet dark theme overrides */
+@keyframes safewatch-pulse-anim {
+  0%, 100% { transform: scale(1); opacity: 0.35; }
+  50%      { transform: scale(1.6); opacity: 0; }
+}
+
+.safewatch-marker { filter: drop-shadow(0 0 6px currentColor); }
+
+.leaflet-container {
+  background: #0a0e17 !important;
+  font-family: var(--app-font-sans);
+  outline: none;
+}
+.leaflet-control-attribution {
+  background: rgba(13, 17, 23, 0.7) !important;
+  color: #64748b !important;
+  font-size: 10px !important;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.leaflet-control-attribution a { color: #94a3b8 !important; }
+.leaflet-tooltip.safewatch-tooltip {
+  background: rgba(13, 17, 23, 0.95) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.6) !important;
+  padding: 6px 10px !important;
+  font-family: var(--app-font-mono);
+}
+.leaflet-tooltip.safewatch-tooltip::before { display: none; }
+.leaflet-control-zoom a {
+  background: rgba(13, 17, 23, 0.9) !important;
+  color: #e2e8f0 !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+}
+.safewatch-cluster-ring { animation: safewatch-cluster-pulse 3s ease-in-out infinite; }
+@keyframes safewatch-cluster-pulse {
+  0%, 100% { fill-opacity: 0.05; }
+  50%      { fill-opacity: 0.14; }
+}
+
+/* 3D perspective mode — tilts the entire map for a depth effect.
+   Note: Leaflet doesn't know about CSS transforms, so click coords are
+   slightly offset. Pins remain interactive but precision degrades. */
+.safewatch-map-stage {
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center 70%;
+  will-change: transform;
+}
+.safewatch-map-stage.is-3d {
+  transform: perspective(1600px) rotateX(42deg) scale(1.05);
+}
+.safewatch-map-stage.is-3d .leaflet-container {
+  box-shadow:
+    0 40px 80px rgba(0, 0, 0, 0.6),
+    0 80px 160px rgba(59, 130, 246, 0.08);
+}
+.safewatch-map-stage.is-3d .safewatch-marker {
+  filter: drop-shadow(0 0 6px currentColor) drop-shadow(0 6px 12px rgba(0,0,0,0.7));
+}
+
+/* Atmospheric vignette — subtle radial darkening to add depth */
+.safewatch-vignette {
+  background:
+    radial-gradient(ellipse at center, transparent 40%, rgba(10,14,23,0.35) 80%, rgba(10,14,23,0.7) 100%);
+  z-index: 400;
+}
+
+/* Translucent glass panels — like the reference image */
+.safewatch-glass-panel {
+  background: rgba(8, 11, 18, 0.55);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.02) inset,
+    0 1px 0 rgba(255, 255, 255, 0.04) inset;
+}
+
+.safewatch-control-btn {
+  background: rgba(8, 11, 18, 0.55);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+  transition: all 200ms ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.safewatch-control-btn:hover {
+  background: rgba(20, 25, 38, 0.7);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.safewatch-control-btn.is-active {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
+}
+
+/* Hover/selected area outline — drawn as a soft glowing region */
+.safewatch-area-outline {
+  filter: drop-shadow(0 0 6px currentColor);
+  animation: safewatch-area-pulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes safewatch-area-pulse {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
+}
+
+/* Pushpin marker — 3D look + gentle bounce */
+.safewatch-pin-wrap { background: transparent !important; border: none !important; }
+.safewatch-pushpin {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.55));
+}
+.safewatch-pushpin-body {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  transform-origin: 50% 100%;
+  animation: safewatch-pushpin-bounce var(--pin-bounce) cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  transition: filter 200ms ease;
+}
+.safewatch-pushpin-body:hover { filter: brightness(1.15); }
+.safewatch-pushpin.is-selected .safewatch-pushpin-body {
+  filter: drop-shadow(0 0 8px var(--pin-color)) brightness(1.1);
+}
+.safewatch-pushpin-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -1px;
+  width: calc(var(--head-size) * 0.85);
+  height: 4px;
+  margin-left: calc(var(--head-size) * -0.425);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.6) 0%, transparent 70%);
+  filter: blur(1px);
+  animation: safewatch-pushpin-shadow var(--pin-bounce) cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+@keyframes safewatch-pushpin-bounce {
+  0%, 100% { transform: translateY(0); }
+  35%      { transform: translateY(-6px); }
+  55%      { transform: translateY(-6px); }
+  80%      { transform: translateY(0) scaleY(0.95); }
+  90%      { transform: translateY(0) scaleY(1.02); }
+}
+@keyframes safewatch-pushpin-shadow {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  35%, 55% { transform: scale(0.6); opacity: 0.25; }
+  80%      { transform: scale(1.05); opacity: 0.6; }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   Area pin — one per planning area, color/size by incident count
+   ───────────────────────────────────────────────────────────── */
+.safewatch-area-pin-wrap {
+  background: transparent !important;
+  border: none !important;
+}
+.safewatch-area-pin {
+  position: relative;
+  width: var(--ring-size);
+  height: var(--ring-size);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.safewatch-area-pin-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--pin-ring) 0%, transparent 70%);
+  animation: safewatch-area-ring-pulse var(--pin-bounce) ease-in-out infinite;
+  pointer-events: none;
+}
+.safewatch-area-pin-disc {
+  position: relative;
+  width: var(--pin-size);
+  height: var(--pin-size);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255,255,255,0.4) 0%, transparent 45%),
+    radial-gradient(circle at 50% 50%, var(--pin-fill) 0%, var(--pin-fill) 60%, color-mix(in srgb, var(--pin-fill) 70%, black) 100%);
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 0 12px var(--pin-glow),
+    0 0 24px var(--pin-ring),
+    0 4px 8px rgba(0, 0, 0, 0.5),
+    inset 0 1px 2px rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 200ms ease, box-shadow 200ms ease;
+  animation: safewatch-area-pin-bob var(--pin-bounce) ease-in-out infinite;
+}
+.safewatch-area-pin-disc:hover {
+  transform: scale(1.12);
+  box-shadow:
+    0 0 18px var(--pin-glow),
+    0 0 36px var(--pin-ring),
+    0 6px 12px rgba(0, 0, 0, 0.55),
+    inset 0 1px 2px rgba(255, 255, 255, 0.5);
+}
+.safewatch-area-pin-count {
+  font-family: var(--app-font-mono);
+  font-weight: 700;
+  font-size: calc(var(--pin-size) * 0.42);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+  line-height: 1;
+  user-select: none;
+}
+@keyframes safewatch-area-ring-pulse {
+  0%, 100% { transform: scale(0.85); opacity: 0.55; }
+  50%      { transform: scale(1.15); opacity: 0.95; }
+}
+@keyframes safewatch-area-pin-bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+/* Popup styling — matches the dark glass theme */
+.leaflet-popup.safewatch-popup .leaflet-popup-content-wrapper {
+  background: rgba(8, 11, 18, 0.92) !important;
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.7) !important;
+  padding: 8px 10px !important;
+}
+.leaflet-popup.safewatch-popup .leaflet-popup-content {
+  margin: 4px 2px !important;
+  font-family: var(--app-font-mono);
+}
+.leaflet-popup.safewatch-popup .leaflet-popup-tip {
+  background: rgba(8, 11, 18, 0.92) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+/* ─── Custom scrollbar ──────────────────────────────────────────
+   Applied to: popups, sidebar, detail panel, anywhere needing a
+   subtle dark scrollbar that matches the SafeWatch theme. */
+.safewatch-popup-scroll,
+.safewatch-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(96, 165, 250, 0.35) transparent;
+}
+.safewatch-popup-scroll::-webkit-scrollbar,
+.safewatch-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.safewatch-popup-scroll::-webkit-scrollbar-track,
+.safewatch-scroll::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  margin: 4px 0;
+}
+.safewatch-popup-scroll::-webkit-scrollbar-thumb,
+.safewatch-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    rgba(96, 165, 250, 0.45) 0%,
+    rgba(59, 130, 246, 0.35) 100%
+  );
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.2s;
+}
+.safewatch-popup-scroll::-webkit-scrollbar-thumb:hover,
+.safewatch-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(96, 165, 250, 0.7) 0%,
+    rgba(59, 130, 246, 0.6) 100%
+  );
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+.safewatch-popup-scroll::-webkit-scrollbar-thumb:active,
+.safewatch-scroll::-webkit-scrollbar-thumb:active {
+  background: rgba(96, 165, 250, 0.85);
+  background-clip: padding-box;
+}
+.safewatch-popup-scroll::-webkit-scrollbar-corner,
+.safewatch-scroll::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* legacy 3D bouncing ball pin (kept) */
+.safewatch-pin {
+  position: relative;
+  width: var(--pin-size);
+  height: calc(var(--pin-size) + 14px);
+  pointer-events: none;
+}
+.safewatch-pin-bouncer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+  animation: safewatch-pin-bounce var(--pin-bounce) cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  transform-origin: 50% 100%;
+}
+.safewatch-pin-sphere {
+  width: var(--pin-size);
+  height: var(--pin-size);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 28%,
+      rgba(255,255,255,0.95) 0%,
+      rgba(255,255,255,0.4) 12%,
+      var(--pin-color) 45%,
+      color-mix(in srgb, var(--pin-color) 65%, #000) 100%);
+  box-shadow:
+    0 0 0 1.5px rgba(255,255,255,0.85),
+    0 0 14px color-mix(in srgb, var(--pin-color) 70%, transparent),
+    0 4px 8px rgba(0,0,0,0.55),
+    inset 0 -3px 5px color-mix(in srgb, var(--pin-color) 50%, #000),
+    inset 0 2px 3px rgba(255,255,255,0.4);
+  transition: transform 200ms ease;
+}
+.safewatch-pin.is-selected .safewatch-pin-sphere {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 22px var(--pin-color),
+    0 4px 12px rgba(0,0,0,0.7),
+    inset 0 -3px 5px color-mix(in srgb, var(--pin-color) 50%, #000),
+    inset 0 2px 3px rgba(255,255,255,0.5);
+}
+.safewatch-pin-bouncer:hover .safewatch-pin-sphere { transform: scale(1.12); }
+.safewatch-pin-shadow {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: calc(var(--pin-size) * 0.7);
+  height: 5px;
+  margin-left: calc(var(--pin-size) * -0.35);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.55) 0%, transparent 70%);
+  filter: blur(1px);
+  animation: safewatch-pin-shadow var(--pin-bounce) cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+@keyframes safewatch-pin-bounce {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  40%      { transform: translateY(-10px) scaleY(1.02); }
+  55%      { transform: translateY(-10px) scaleY(1.02); }
+  85%      { transform: translateY(0) scaleY(0.92); }
+  92%      { transform: translateY(0) scaleY(1.02); }
+}
+@keyframes safewatch-pin-shadow {
+  0%, 100% { transform: scale(1); opacity: 0.55; }
+  40%, 55% { transform: scale(0.55); opacity: 0.25; }
+  85%      { transform: scale(1.05); opacity: 0.6; }
+}
+
+/* Smoother Leaflet zoom transitions */
+.leaflet-zoom-anim .leaflet-zoom-animated {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+.leaflet-fade-anim .leaflet-tile,
+.leaflet-fade-anim .leaflet-popup {
+  transition: opacity 0.35s ease-out !important;
+}

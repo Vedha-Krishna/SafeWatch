@@ -414,9 +414,7 @@ def send_agent_feedback(incident_id: str, feedback_data: dict) -> dict[str, obje
     if missing_fields:
         raise HTTPException(
             status_code=422,
-            detail=(
-                f"Missing required fields: {', '.join(missing_fields)}."
-            ),
+            detail=f"Missing required fields: {', '.join(missing_fields)}.",
         )
 
     # Save the feedback to the database
