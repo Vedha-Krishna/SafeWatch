@@ -1,0 +1,70 @@
+# ============================================================
+# PettyCrimeSG — Git Ignore Rules
+# ============================================================
+# Files listed here will NOT be tracked or committed by git.
+# This protects secret keys and keeps the repo clean.
+# ============================================================
+
+
+# -------------------------------------------------------
+# SECRET / ENVIRONMENT FILES
+# Never commit these — they contain API keys and passwords
+# -------------------------------------------------------
+.env
+.env.local
+.env.*.local
+
+
+# -------------------------------------------------------
+# PYTHON
+# -------------------------------------------------------
+# Virtual environment folders
+backend/.venv/
+.venv/
+venv/
+env/
+
+# Python bytecode (auto-generated, not needed in git)
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Python package build artifacts
+*.egg-info/
+dist/
+build/
+
+
+# -------------------------------------------------------
+# NODE / JAVASCRIPT
+# -------------------------------------------------------
+# Node modules (auto-installed via npm install, never commit)
+node_modules/
+frontend/node_modules/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# TypeScript build info (auto-generated)
+frontend/tsconfig.tsbuildinfo
+
+
+# -------------------------------------------------------
+# OPERATING SYSTEM
+# -------------------------------------------------------
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+desktop.ini
+
+
+# -------------------------------------------------------
+# EDITORS / IDEs
+# -------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
