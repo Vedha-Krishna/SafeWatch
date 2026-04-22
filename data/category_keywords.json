@@ -1,0 +1,43 @@
+{
+  "theft": {
+    "keywords": [
+      "steal", "stole", "stolen",
+      "snatch", "snatched",
+      "rob", "robbed", "robbery",
+      "pickpocket", "pickpocketed",
+      "took", "taken"
+    ]
+  },
+  "break_in": {
+    "keywords": [
+      "break in", "broke into", "broken into",
+      "forced entry", "forced open",
+      "burglar", "burglary",
+      "house break", "shop break"
+    ]
+  },
+  "vandalism": {
+    "keywords": [
+      "vandal", "vandalism",
+      "spray paint", "graffiti",
+      "damaged", "damage", "destroyed",
+      "smashed", "broken window"
+    ]
+  },
+  "scam": {
+    "keywords": [
+      "scam", "scammed", "fraud",
+      "phishing", "fake link",
+      "impersonation", "spoof",
+      "被骗", "诈骗"
+    ]
+  },
+  "suspicious": {
+    "keywords": [
+      "suspicious", "loitering",
+      "following", "lurking",
+      "strange behavior", "weird guy",
+      "unknown person"
+    ]
+  }
+}

@@ -1,14 +1,32 @@
-{
-  "incident_id": "001",
-  "source_platform": "reddit",
-  "source_url": "https://example.com/post1",
-  "raw_text": "Saw someone snatch a phone near Bugis MRT around 8pm.",
-  "category": null,
-  "authenticity_score": null,
-  "severity": null,
-  "location": null,
-  "time": null,
-  "action": null,
-  "decision": null,
-  "agent_notes": null
-}
+[
+  {
+    "incident_id": "001",
+    "source_platform": "reddit",
+    "source_url": "https://example.com/post1",
+    "raw_text": "Saw someone snatch a phone near Bugis MRT around 8pm."
+  },
+  {
+    "incident_id": "002",
+    "source_platform": "reddit",
+    "source_url": "https://example.com/post2",
+    "raw_text": "There was spray paint vandalism at a wall in Tampines this morning."
+  },
+  {
+    "incident_id": "003",
+    "source_platform": "reddit",
+    "source_url": "https://example.com/post3",
+    "raw_text": "Someone stole a bike near Toa Payoh around 9pm."
+  },
+  {
+    "incident_id": "004",
+    "source_platform": "reddit",
+    "source_url": "https://example.com/post4",
+    "raw_text": "Something suspicious happened last night but I am not sure where."
+  },
+  {
+    "incident_id": "005",
+    "source_platform": "reddit",
+    "source_url": "https://example.com/post5",
+    "raw_text": "A shop at Jurong East was broken into around 10pm."
+  }
+]
