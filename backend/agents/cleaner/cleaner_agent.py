@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Literal
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Literal, Optional
+from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
@@ -20,6 +21,22 @@ class CleanedIncident(BaseModel):
         ),
     )
     topic_bucket: Literal["singapore_news", "singapore_viral", "other"]
+    location_text: Optional[str] = Field(
+        default=None,
+        description="Normalized Singapore location name, e.g. 'Ang Mo Kio MRT'.",
+    )
+    latitude: Optional[float] = Field(
+        default=None,
+        description="Approximate latitude in Singapore (expected range 1.1 to 1.5).",
+    )
+    longitude: Optional[float] = Field(
+        default=None,
+        description="Approximate longitude in Singapore (expected range 103.6 to 104.1).",
+    )
+    normalized_time: Optional[str] = Field(
+        default=None,
+        description="ISO-8601 timestamp in SGT (UTC+8), e.g. 2026-04-23T20:00:00+08:00.",
+    )
 
 
 def get_supabase_client():
@@ -69,7 +86,7 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
     Selection rule: status='queued' AND workflow_stage='crawl'.
     Lock rule: set status='in_progress' and locked_by='cleaner_agent'.
     """
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(ZoneInfo("UTC")).isoformat()
     response = (
         supabase.table("incidents")
         .select("incident_id, raw_text, status, workflow_stage")
@@ -113,14 +130,24 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
 
 
 def clean_with_llm(openai_client: Any, raw_text: str) -> CleanedIncident:
+    current_sgt = datetime.now(ZoneInfo("Asia/Singapore")).isoformat(timespec="seconds")
     system_prompt = (
         "You are the Cleaner Agent for a Singapore OSINT incident pipeline. "
         "Rewrite noisy user text into a formal, objective incident summary.\n"
+        f"Current Singapore time (SGT, UTC+8): {current_sgt}\n"
         "Rules:\n"
         "- Output exactly 1-2 sentences in cleaned_content.\n"
         "- Remove slang, emotion, exaggeration, and usernames/handles.\n"
         "- Keep factual details only (what happened, where, when, who/what affected if available).\n"
         "- Select topic_bucket as one of: singapore_news, singapore_viral, other.\n"
+        "- Geocoder behavior:\n"
+        "  - If a Singapore location is detected, output location_text as a normalized place name.\n"
+        "  - Also output approximate coordinates in Singapore bounds only: latitude 1.1-1.5, longitude 103.6-104.1.\n"
+        "  - If no reliable location, set location_text, latitude, longitude to null.\n"
+        "- Time normalization behavior:\n"
+        "  - Convert relative time phrases (e.g. yesterday, last night, ytd, this morning) "
+        "to absolute ISO-8601 in SGT using the provided current SGT reference.\n"
+        "  - If no reliable time is available, set normalized_time to null.\n"
         "- singapore_news: factual local incident/scam/crime/safety report in Singapore.\n"
         "- singapore_viral: socially viral discussion/drama content tied to Singapore.\n"
         "- other: unrelated, unclear, or insufficiently relevant content."
@@ -152,6 +179,10 @@ def update_and_handoff(
     update_payload = {
         "cleaned_content": cleaned_incident.cleaned_content,
         "topic_bucket": cleaned_incident.topic_bucket,
+        "location_text": cleaned_incident.location_text,
+        "latitude": cleaned_incident.latitude,
+        "longitude": cleaned_incident.longitude,
+        "normalized_time": cleaned_incident.normalized_time,
         "workflow_stage": "clean",
         "status": "queued",
         "locked_by": None,
