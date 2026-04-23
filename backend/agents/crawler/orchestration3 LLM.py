@@ -1,8 +1,6 @@
 import json
 from typing import TypedDict, Optional, List
 from langgraph.graph import StateGraph, START, END
-from IPython.display import Image, display
-from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 
 from dotenv import load_dotenv
 import os
@@ -449,7 +447,6 @@ graph_builder.add_node("decision", decision_node)
 graph_builder.add_edge(START, "crawler")
 graph_builder.add_edge("crawler", "classifier")
 graph_builder.add_edge("classifier", "decision")
-graph_builder.add_edge("decision", END)
 
 ## CONDTIONAL EDGES
 graph_builder.add_conditional_edges("decision", edge_after_decision)
@@ -546,26 +543,7 @@ if __name__ == "__main__":
         print(f"Location: {result['location']}")
         print(f"Time: {result['time']}")
         print(f"Action: {result['action']}")
-
-        # 🔥 Show ONLY key reasoning (not spam)
-        last_reasoning = None
-        for msg in reversed(result["messages"]):
-            if "llm_reasoning" in msg:
-                last_reasoning = msg["llm_reasoning"]
-                break
-
-        if last_reasoning:
-            print(f"LLM Reasoning: {last_reasoning}")
-
-        print("-" * 40)
-
-    print("\n=== SUMMARY ===\n")
-
-    total = len(all_results)
-
-    print(f"Total Incidents: {total}")
-    print(f"Accepted (Published): {accepted}")
-    print(f"Rejected: {rejected}")
-
-    if total > 0:
-        print(f"Acceptance Rate: {round((accepted / total) * 100, 1)}%")
+        print("Agent Messages:")
+        for note in result["messages"]:
+            print(f"  - {note}")
+        print("-" * 50)
