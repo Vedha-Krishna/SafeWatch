@@ -1,13 +1,37 @@
 import json
 from typing import TypedDict, Optional, List
 from langgraph.graph import StateGraph, START, END
+from IPython.display import Image, display
+from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 
 from dotenv import load_dotenv
 import os
 load_dotenv()
 
+from sklearn.metrics.pairwise import cosine_similarity
+
 from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+CATEGORY_DEFINITIONS = {
+    "theft": "stealing, snatch theft, pickpocket, stolen items",
+    "vandalism": "graffiti, spray paint, property damage, vandalism",
+    "burglary": "break into, forced entry, shop break-in, house intrusion",
+    "suspicious": "loitering, suspicious activity, unknown behavior"
+}
+
+def get_embedding(text: str):
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text
+    )
+    return response.data[0].embedding
+
+CATEGORY_EMBEDDINGS = {
+    cat: get_embedding(desc)
+    for cat, desc in CATEGORY_DEFINITIONS.items()
+}
 
 
 # =========================================================
@@ -130,23 +154,26 @@ def classifier_node(state: State) -> dict:
     elif "broke into" in text:
         action = "break-in"
 
-    # ---------- Category + Severity ----------
-    # MOCK: Deterministic mapping (real system would use LLM or model)
-    category = "unknown"
-    severity = 0.2
+    # ---------- Category via Vector Similarity ----------
 
-    if action == "snatch theft":
-        category = "theft"
-        severity = 0.8
-    elif action == "theft":
-        category = "theft"
-        severity = 0.6
-    elif action == "vandalism":
-        category = "vandalism"
-        severity = 0.4
-    elif action == "break-in":
-        category = "break-in"
-        severity = 0.9
+    text_embedding = get_embedding(state["raw_text"])
+
+    best_category = None
+    best_score = -1
+
+    for cat, emb in CATEGORY_EMBEDDINGS.items():
+        score = cosine_similarity([text_embedding], [emb])[0][0]
+
+        if score > best_score:
+            best_score = score
+            best_category = cat
+
+    category = best_category
+
+    state["messages"].append({
+        "agent": "classifier",
+        "note": f"Category selected via vector similarity: {category} (score={round(best_score, 3)})"
+    })
 
     # ACTUAL LLM REASONING (CORE)
     # Classifier re-evaluates classification using feedback from Decision Agent
@@ -204,7 +231,7 @@ def classifier_node(state: State) -> dict:
 
 
 
-    # ---------- AUTHENTICITY SCORE ----------
+    # ---------- AUTHENTICITY & SEVERITY SCORE ----------
     # LLM-as-a-Judge (RUBRIC-BASED FEATURE EXTRACTION)
     prompt = f"""
     You are evaluating a petty crime report using a scoring rubric.
@@ -347,7 +374,16 @@ def classifier_node(state: State) -> dict:
         0.20 * risk
     )
 
+    # ---------- AUTHENTICITY SCORE ----------
     authenticity_score = max(0, min(authenticity_score, 1))
+
+    # ---------- SEVERITY SCORE ----------
+    severity = round(
+        0.4 * detail +
+        0.3 * evidence +
+        0.3 * risk,
+        2
+    )
 
     # Log Reasoning
     state["messages"].append({
@@ -404,7 +440,7 @@ def decision_node(state: State) -> dict:
 
     state["messages"].append({
         "agent": "decision",
-        "note": f"Final decision: {state['decision']} based on authenticity score {state['authenticity_score']}"
+        "note": f"Decision: {state['decision']} based on authenticity score {state['authenticity_score']}"
     })
 
     return state
@@ -414,7 +450,7 @@ def decision_node(state: State) -> dict:
 # =========================================================
 # 5. CONDITIONAL EDGE ROUTER
 # ---------------------------------------------------------
-# This determines where to go AFTER the decision node.
+# where to go AFTER the decision node.
 #
 # If "needs_retry":
 # - increment retry_count
@@ -447,6 +483,7 @@ graph_builder.add_node("decision", decision_node)
 graph_builder.add_edge(START, "crawler")
 graph_builder.add_edge("crawler", "classifier")
 graph_builder.add_edge("classifier", "decision")
+graph_builder.add_edge("decision", END)
 
 ## CONDTIONAL EDGES
 graph_builder.add_conditional_edges("decision", edge_after_decision)
@@ -530,12 +567,16 @@ if __name__ == "__main__":
     rejected = 0
 
     for result in all_results:
+        print("\n=== RAW MESSAGES ===\n")
+        print(result["messages"])
+
         if result["decision"] == "publish":
             accepted += 1
         elif result["decision"] == "reject":
             rejected += 1
 
         print(f"Incident ID: {result['incident_id']}")
+        print(f"Retry Count: {result['retry_count']}")
         print(f"Decision: {result['decision'].upper()}")
         print(f"Category: {result['category']}")
         print(f"Authenticity Score: {round(result['authenticity_score'], 2)}")
@@ -544,7 +585,7 @@ if __name__ == "__main__":
         print(f"Time: {result['time']}")
         print(f"Action: {result['action']}")
 
-        # 🔥 Show ONLY key reasoning (not spam)
+        # Show ONLY key reasoning (not spam)
         last_reasoning = None
         for msg in reversed(result["messages"]):
             if "llm_reasoning" in msg:
@@ -553,6 +594,32 @@ if __name__ == "__main__":
 
         if last_reasoning:
             print(f"LLM Reasoning: {last_reasoning}")
+
+        # =========================
+        # AI-to-AI INTERACTION LOG
+        # (comment this whole block when not needed)
+        # =========================
+
+        print("\n Agent Conversation:\n")
+
+        for msg in result["messages"]:
+            agent = msg.get("agent", "unknown")
+
+            if "llm_reasoning" in msg:
+                print(f"  {agent.capitalize()} (LLM):")
+                print(f"   {msg['llm_reasoning']}\n")
+
+            elif "reasoning" in msg:
+                print(f"  {agent.capitalize()} (system):")
+                print(f"   {msg['reasoning']}\n")
+
+            elif "instruction" in msg:
+                print(f"  {agent.capitalize()}")
+                print(f"   {msg['instruction']}\n")
+
+            elif "note" in msg:
+                print(f"  {agent.capitalize()}:")
+                print(f"   {msg['note']}\n")
 
         print("-" * 40)
 
