@@ -8,8 +8,30 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 
+from sklearn.metrics.pairwise import cosine_similarity
+
 from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+CATEGORY_DEFINITIONS = {
+    "theft": "stealing, snatch theft, pickpocket, stolen items",
+    "vandalism": "graffiti, spray paint, property damage, vandalism",
+    "burglary": "break into, forced entry, shop break-in, house intrusion",
+    "suspicious": "loitering, suspicious activity, unknown behavior"
+}
+
+def get_embedding(text: str):
+    response = client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text
+    )
+    return response.data[0].embedding
+
+CATEGORY_EMBEDDINGS = {
+    cat: get_embedding(desc)
+    for cat, desc in CATEGORY_DEFINITIONS.items()
+}
 
 
 # =========================================================
@@ -67,7 +89,6 @@ def crawler_node(state: State) -> dict:
         "agent": "crawler",
         "note": "Crawler extracted basic fields"
     })
-    state["retry_count"] += 1
 
     return state
 
@@ -76,19 +97,12 @@ def crawler_node(state: State) -> dict:
 # =========================================================
 # 3. CLASSIFIER NODE
 # ---------------------------------------------------------
-# This node assigns:
-# - location extraction
-# - time extraction
-# - action extraction
-# - category scoring
-# - authenticity scoring
+# This node performs:
+# - llm rule-based extraction
+# - vector similarity category selection
+# - LLM reasoning
+# - rubric-based authenticity scoring
 # - severity scoring
-#
-# For now this is still mock logic.
-# Later you can replace this with:
-# - rule-based scoring
-# - embeddings
-# - LLM scoring
 # =========================================================
 def classifier_node(state: State) -> dict:
     text = state["raw_text"].lower()
@@ -100,104 +114,138 @@ def classifier_node(state: State) -> dict:
         if m.get("feedback_to") == "classifier"
     ]
 
-    # ---------- Extraction ----------
+    # ---------- EXTRACT LOCATION, TIME, ACTION ----------
     location = None
     time = None
     action = None
 
-    if "bugis" in text:
-        location = "Bugis MRT"
-    elif "toa payoh" in text:
-        location = "Toa Payoh"
-    elif "jurong east" in text:
-        location = "Jurong East"
-    elif "tampines" in text:
-        location = "Tampines"
+    prompt = f"""
+    You are an extraction agent for petty crime reports in Singapore.
 
-    if "8pm" in text:
-        time = "8pm"
-    elif "9pm" in text:
-        time = "9pm"
-    elif "10pm" in text:
-        time = "10pm"
-    elif "morning" in text:
-        time = "morning"
+    Text:
+    {state["raw_text"]}
 
-    if "snatch" in text or "snatched" in text:
-        action = "snatch theft"
-    elif "stole" in text or "steal" in text or "stolen" in text:
-        action = "theft"
-    elif "vandal" in text or "spray paint" in text:
-        action = "vandalism"
-    elif "broke into" in text:
-        action = "break-in"
+    Extract the following fields from the text:
+    - location
+    - time
+    - action
 
-    # ---------- Category + Severity ----------
-    # MOCK: Deterministic mapping (real system would use LLM or model)
-    category = "unknown"
-    severity = 0.2
+    Rules:
+    - Use null if a field is not clearly present
+    - Keep values short and literal
+    - Do not infer extra details not supported by the text
 
-    if action == "snatch theft":
-        category = "theft"
-        severity = 0.8
-    elif action == "theft":
-        category = "theft"
-        severity = 0.6
-    elif action == "vandalism":
-        category = "vandalism"
-        severity = 0.4
-    elif action == "break-in":
-        category = "break-in"
-        severity = 0.9
+    Respond ONLY in JSON:
+    {{
+        "location": "... or null",
+        "time": "... or null",
+        "action": "... or null"
+    }}
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    raw = response.choices[0].message.content
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
+    try:
+        result = json.loads(raw)
+
+        if not isinstance(result, dict):
+            raise ValueError
+
+    except (json.JSONDecodeError, ValueError):
+        result = {
+            "location": None,
+            "time": None,
+            "action": None
+        }
+
+        state["messages"].append({
+            "agent": "classifier",
+            "note": "LLM extraction failed, fallback used",
+            "raw_output": raw
+        })
+
+    location = result.get("location")
+    time = result.get("time")
+    action = result.get("action")
+
+    state["messages"].append({
+        "agent": "classifier",
+        "reasoning": "LLM extraction completed",
+        "extracted_fields": {
+            "location": location,
+            "time": time,
+            "action": action
+        }
+    })
+
+    # ---------- Category via Vector Similarity ----------
+
+    text_embedding = get_embedding(state["raw_text"])
+
+    best_category = None
+    best_score = -1
+
+    for cat, emb in CATEGORY_EMBEDDINGS.items():
+        score = cosine_similarity([text_embedding], [emb])[0][0]
+
+        if score > best_score:
+            best_score = score
+            best_category = cat
+
+    category = best_category
+
+    state["messages"].append({
+        "agent": "classifier",
+        "note": f"Category selected via vector similarity: {category} (score={round(best_score, 3)})"
+    })
 
     # ACTUAL LLM REASONING (CORE)
-    # Classifier re-evaluates classification using feedback from Decision Agent
+    # Classifier explains the vector-selected category using feedback from Decision Agent
     if feedback_msgs:
         prompt = f"""
-        You are a unreported petty crime classification agent for Singapore.
+        You are a petty crime reasoning agent for Singapore.
 
         Text:
         {state["raw_text"]}
 
-        Current classification:
-        category = {category}
+        Final category selected by vector similarity:
+        {category}
 
         Feedback:
         {feedback_msgs}
 
-        Re-evaluate the category and give a better classification.
+        Explain why this category fits the text, or explain what evidence is weak.
 
         Respond ONLY in JSON:
         {{
-            "category": "...",
             "llm_reasoning": "..."
         }}
         """
 
-        # Capture LLM Response
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
 
-        # LLM JSON TO DICT
-        raw = response.choices[0].message.content #GET RAW RESPONSE
-
-        raw = raw.replace("```json", "").replace("```", "").strip() #CLEAN
+        raw = response.choices[0].message.content
+        raw = raw.replace("```json", "").replace("```", "").strip()
 
         try:
             result = json.loads(raw)
 
-            if "category" not in result:
+            if "llm_reasoning" not in result:
                 raise ValueError
-            
-        except json.JSONDecodeError:
-            result = {
-                "category": category,  # fallback to previous
-                "llm_reasoning": "LLM output invalid, fallback used"
-    }
 
-        category = result["category"]
+        except (json.JSONDecodeError, ValueError):
+            result = {
+                "llm_reasoning": "LLM output invalid, fallback used"
+            }
 
         state["messages"].append({
             "agent": "classifier",
@@ -206,13 +254,18 @@ def classifier_node(state: State) -> dict:
 
 
 
-    # ---------- AUTHENTICITY SCORE ----------
+    # ---------- AUTHENTICITY & SEVERITY SCORE ----------
     # LLM-as-a-Judge (RUBRIC-BASED FEATURE EXTRACTION)
     prompt = f"""
     You are evaluating a petty crime report using a scoring rubric.
 
     Text:
     {state["raw_text"]}
+
+    Extracted Fields:
+    location={location}
+    time={time}
+    action={action}
 
     Extract whether the following features are present (true/false):
 
@@ -293,7 +346,7 @@ def classifier_node(state: State) -> dict:
 
         state["messages"].append({
             "agent": "classifier",
-            "llm_reasoning": "LLM feature extraction failed, fallback used",
+            "note": "LLM feature extraction failed, fallback used",
             "raw_output": raw
         })
 
@@ -308,9 +361,9 @@ def classifier_node(state: State) -> dict:
     # SCORE THE POST
     # DETAIL SPECIFICITY
     detail = (
-        0.25 * features.get("specific_location", 0) +
-        0.20 * features.get("specific_time", 0) +
-        0.25 * features.get("specific_action", 0) +
+        0.5 * features.get("specific_location", 0) +
+        0.5 * features.get("specific_time", 0) +
+        0.5 * features.get("specific_action", 0) +
         0.20 * features.get("object_or_person", 0) +
         0.10 * features.get("consequence", 0)
     )
@@ -346,10 +399,19 @@ def classifier_node(state: State) -> dict:
         0.25 * detail +
         0.25 * evidence +
         0.15 * consistency -
-        0.20 * risk
+        0.05 * risk
     )
 
+    # ---------- AUTHENTICITY SCORE ----------
     authenticity_score = max(0, min(authenticity_score, 1))
+
+    # ---------- SEVERITY SCORE ----------
+    severity = round(
+        0.4 * detail +
+        0.3 * evidence +
+        0.3 * risk,
+        2
+    )
 
     # Log Reasoning
     state["messages"].append({
@@ -378,36 +440,112 @@ def classifier_node(state: State) -> dict:
 # - needs_retry
 # - reject
 #
-# Logic here is intentionally simple and explainable.
 # =========================================================
 def decision_node(state: State) -> dict:
 
-    # MOCK: Hardcoded decision logic (instead of LLM deciding)
+    # HARD RETRY GUARD
+    # Force reject if retry limit is reached and authenticity is still low
     if (
-        state["authenticity_score"] is not None
-        and state["authenticity_score"] >= 0.7
-        and state["category"] != "unknown"
+        state["retry_count"] >= 2
     ):
-        state["decision"] = "publish"
-
-    elif state["retry_count"] >= 5:
         state["decision"] = "reject"
 
-    else:
-        # MOCK LLM REASONING (CRITIQUE STEP)
-        # Simulates decision agent analyzing output and giving feedback
+        state["messages"].append({
+            "agent": "decision",
+            "note": "Decision: reject",
+            "decision_reason": "Retry limit reached with low authenticity score"
+        })
+
+        return state
+
+    prompt = f"""
+    You are the final decision agent in a petty crime incident pipeline for Singapore.
+
+    Decide one of:
+    - publish
+    - needs_retry
+    - reject
+
+    Incident data:
+    category: {state["category"]}
+    authenticity_score: {state["authenticity_score"]}
+    severity: {state["severity"]}
+    location: {state["location"]}
+    time: {state["time"]}
+    action: {state["action"]}
+    retry_count: {state["retry_count"]}
+
+    Authenticity Score interpretation:
+    - 0.00 to 0.09 = weak evidence
+    - 0.10 to 0.15 = moderate evidence
+    - 0.16 to 0.25 = strong evidence
+    - 0.25 and above = very strong
+    - Do not treat 0.25 as low.
+    - In this system, a score of 0.25 can already support publication if the report contains a concrete location, time, and action.
+    - Community reports do not require police reports, media, or multiple witnesses to be publishable.
+
+    Rules:
+    - Reports with concrete location, time, and action should generally be publishable even without witness statements, media, or police reports.
+    - Do not require corroborating evidence for ordinary community petty-crime reports if the incident details are specific and coherent.
+    - Use "needs_retry" only if missing information could realistically be improved.
+    - Prefer "publish" over repeated retries when location, time, and action are already concrete.
+
+    Respond ONLY in JSON:
+    {{
+        "decision": "publish | needs_retry | reject",
+        "decision_reason": "...",
+        "instruction": "..."
+    }}
+    """
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    raw = response.choices[0].message.content
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
+    try:
+        result = json.loads(raw)
+
+        if "decision" not in result:
+            raise ValueError
+
+    except (json.JSONDecodeError, ValueError):
+        if state["retry_count"] >= 2:
+            result = {
+                "decision": "reject",
+                "decision_reason": "LLM output invalid, fallback reject used",
+                "instruction": "No further retry"
+            }
+        else:
+            result = {
+                "decision": "needs_retry",
+                "decision_reason": "LLM output invalid, fallback retry used",
+                "instruction": "Improve classification using stronger evidence"
+            }
+
+    state["decision"] = result["decision"]
+
+    if state["decision"] == "needs_retry":
+        state["retry_count"] += 1
+
         state["messages"].append({
             "agent": "decision",
             "feedback_to": "classifier",
-            "instruction": "Improve classification using stronger evidence",
-            "reason": f"Low authenticity score: {state['authenticity_score']}"
+            "instruction": result.get("instruction", "Improve classification using stronger evidence"),
+            "reason": result.get("decision_reason", "Needs stronger evidence")
         })
-        state["decision"] = "needs_retry"
 
     state["messages"].append({
         "agent": "decision",
-        "note": f"Final decision: {state['decision']} based on authenticity score {state['authenticity_score']}"
+        "note": f"Decision: {state['decision']}",
+        "decision_reason": result.get("decision_reason", "No reason provided")
     })
+
+    print("DEBUG retry_count:", state["retry_count"])
+    print("DEBUG current decision state:", state.get("decision"))
 
     return state
 
@@ -449,7 +587,6 @@ graph_builder.add_node("decision", decision_node)
 graph_builder.add_edge(START, "crawler")
 graph_builder.add_edge("crawler", "classifier")
 graph_builder.add_edge("classifier", "decision")
-graph_builder.add_edge("decision", END)
 
 ## CONDTIONAL EDGES
 graph_builder.add_conditional_edges("decision", edge_after_decision)
@@ -527,23 +664,37 @@ if __name__ == "__main__":
         final_state = run_pipeline_for_1_post(post)
         all_results.append(final_state)
 
-    print("\n=== FINAL RESULTS ===\n")
+    print("\n=== INCIDENT RESULTS ===\n")
+
+    accepted = 0
+    rejected = 0
+
     for result in all_results:
+        # print("\n=== RAW MESSAGES ===\n")
+        # print(result["messages"])
+
         if result["decision"] == "publish":
             accepted += 1
         elif result["decision"] == "reject":
             rejected += 1
 
         print(f"Incident ID: {result['incident_id']}")
+        print(f"Retry Count: {result['retry_count']}")
         print(f"Decision: {result['decision'].upper()}")
+
+        for msg in reversed(result["messages"]):
+            if msg.get("agent") == "decision" and "decision_reason" in msg:
+                print(f"Decision Reason: {msg['decision_reason']}")
+                break
+
         print(f"Category: {result['category']}")
-        print(f"Authenticity: {result['authenticity_score']}")
+        print(f"Authenticity Score: {round(result['authenticity_score'], 2)}")
         print(f"Severity: {result['severity']}")
         print(f"Location: {result['location']}")
         print(f"Time: {result['time']}")
         print(f"Action: {result['action']}")
 
-        # 🔥 Show ONLY key reasoning (not spam)
+        # Show ONLY key reasoning (not spam)
         last_reasoning = None
         for msg in reversed(result["messages"]):
             if "llm_reasoning" in msg:
@@ -552,6 +703,32 @@ if __name__ == "__main__":
 
         if last_reasoning:
             print(f"LLM Reasoning: {last_reasoning}")
+
+        # =========================
+        # AI-to-AI INTERACTION LOG
+        # (comment this whole block when not needed)
+        # =========================
+
+        print("\n Agent Conversation:\n")
+
+        for msg in result["messages"]:
+            agent = msg.get("agent", "unknown")
+
+            if "llm_reasoning" in msg:
+                print(f"  {agent.capitalize()} (LLM):")
+                print(f"   {msg['llm_reasoning']}\n")
+
+            elif "reasoning" in msg:
+                print(f"  {agent.capitalize()} (system):")
+                print(f"   {msg['reasoning']}\n")
+
+            elif "instruction" in msg:
+                print(f"  {agent.capitalize()}")
+                print(f"   {msg['instruction']}\n")
+
+            elif "note" in msg:
+                print(f"  {agent.capitalize()}:")
+                print(f"   {msg['note']}\n")
 
         print("-" * 40)
 
