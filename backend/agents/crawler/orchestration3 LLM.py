@@ -1,8 +1,6 @@
 import json
 from typing import TypedDict, Optional, List
 from langgraph.graph import StateGraph, START, END
-from IPython.display import Image, display
-from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
 
 from dotenv import load_dotenv
 import os
@@ -444,7 +442,6 @@ graph_builder.add_node("decision", decision_node)
 graph_builder.add_edge(START, "crawler")
 graph_builder.add_edge("crawler", "classifier")
 graph_builder.add_edge("classifier", "decision")
-graph_builder.add_edge("decision", END)
 
 ## CONDTIONAL EDGES
 graph_builder.add_conditional_edges("decision", edge_after_decision)
@@ -537,3 +534,5 @@ if __name__ == "__main__":
         for note in result["messages"]:
             print(f"  - {note}")
         print("-" * 50)
+
+    client.close()
