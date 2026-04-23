@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from datetime import datetime, timezone
 from typing import Any
 
@@ -189,28 +190,40 @@ def crawl_reddit_posts(
     user_agent: str = DEFAULT_USER_AGENT,
     latest_reddit_id: str | None = None,
     backfill: bool = False,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     posts = fetch_new_posts(
         subreddit_name=subreddit_name,
         limit=limit,
         user_agent=user_agent,
     )
     payloads: list[dict[str, Any]] = []
+    scanned = 0
+    passed_filter = 0
+    stopped_at_checkpoint = False
 
     for post_data in posts:
         extracted = extract_submission_fields(post_data)
+        scanned += 1
         if (
             not backfill
             and latest_reddit_id
             and extracted["post_id"]
             and extracted["post_id"] == latest_reddit_id
         ):
+            stopped_at_checkpoint = True
             break
 
         if evaluate_post_relevance(extracted["title"], extracted["body_text"]):
             payloads.append(to_incident_payload(extracted))
+            passed_filter += 1
 
-    return payloads
+    stats = {
+        "fetched": len(posts),
+        "scanned": scanned,
+        "stopped_at_checkpoint": stopped_at_checkpoint,
+        "passed_filter": passed_filter,
+    }
+    return payloads, stats
 
 
 def parse_args() -> argparse.Namespace:
@@ -260,6 +273,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print formatted JSON for readability.",
     )
+    parser.add_argument(
+        "--stats",
+        action="store_true",
+        help=(
+            "Print crawler diagnostics to stderr "
+            "(fetched, scanned, stopped_at_checkpoint, passed_filter)."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -277,7 +298,7 @@ def main() -> None:
         supabase = get_supabase_client()
         latest_reddit_id = get_latest_reddit_id(supabase)
 
-    payloads = crawl_reddit_posts(
+    payloads, stats = crawl_reddit_posts(
         subreddit_name=args.subreddit,
         limit=effective_limit,
         user_agent=args.user_agent,
@@ -286,6 +307,12 @@ def main() -> None:
     )
     if args.upload:
         upload_to_supabase(payloads, supabase=supabase)
+
+    if args.stats:
+        print(
+            json.dumps(stats, ensure_ascii=False),
+            file=sys.stderr,
+        )
 
     print(
         json.dumps(
