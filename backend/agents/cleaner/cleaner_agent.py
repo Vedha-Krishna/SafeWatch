@@ -83,15 +83,15 @@ def get_openai_client() -> "OpenAI":
 def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
     """
     Claim one incident for cleaning.
-    Selection rule: status='queued' AND workflow_stage='crawl'.
+    Selection rule: status='queued' AND cleaned_content is null.
     Lock rule: set status='in_progress' and locked_by='cleaner_agent'.
     """
     now_iso = datetime.now(ZoneInfo("UTC")).isoformat()
     response = (
         supabase.table("incidents")
-        .select("incident_id, raw_text, status, workflow_stage")
+        .select("incident_id, raw_text, status, cleaned_content")
         .eq("status", "queued")
-        .eq("workflow_stage", "crawl")
+        .is_("cleaned_content", "null")
         .is_("locked_by", "null")
         .lte("available_at", now_iso)
         .order("created_at", desc=False)
@@ -118,7 +118,7 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
             .update(lock_payload)
             .eq("incident_id", incident_id)
             .eq("status", "queued")
-            .eq("workflow_stage", "crawl")
+            .is_("cleaned_content", "null")
             .is_("locked_by", "null")
             .execute()
         )
@@ -183,7 +183,6 @@ def update_and_handoff(
         "latitude": cleaned_incident.latitude,
         "longitude": cleaned_incident.longitude,
         "normalized_time": cleaned_incident.normalized_time,
-        "workflow_stage": "clean",
         "status": "queued",
         "locked_by": None,
         "locked_at": None,

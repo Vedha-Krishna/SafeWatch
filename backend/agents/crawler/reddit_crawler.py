@@ -3,7 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import sys
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -22,6 +24,11 @@ REDDIT_BASE_URL = "https://www.reddit.com"
 RELEVANT_LABEL = "petty crime, theft, or scam"
 OTHER_LABEL = "general news or casual conversation"
 RELEVANCE_THRESHOLD = 0.60
+DEFAULT_COMMENT_LIMIT = 10
+MAX_CLASSIFY_CHARS = 4000
+DEFAULT_MAX_RETRIES = 5
+DEFAULT_REQUEST_DELAY = 0.35
+DEFAULT_BACKOFF_BASE_SECONDS = 1.5
 
 classifier = pipeline(
     "zero-shot-classification",
@@ -72,21 +79,22 @@ def fetch_new_posts(
     limit: int,
     user_agent: str,
     timeout: int = DEFAULT_TIMEOUT,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    request_delay: float = DEFAULT_REQUEST_DELAY,
 ) -> list[dict[str, Any]]:
     """Fetch the newest posts from a subreddit using Reddit's public JSON endpoint."""
     url = f"{REDDIT_BASE_URL}/r/{subreddit_name}/new.json"
     headers = {"User-Agent": user_agent}
     params = {"limit": limit}
 
-    response = requests.get(url, headers=headers, params=params, timeout=timeout)
-    if response.status_code == 429:
-        raise RuntimeError(
-            "Reddit returned HTTP 429 (Too Many Requests). "
-            "Use a clear custom User-Agent and reduce request frequency."
-        )
-    response.raise_for_status()
-
-    payload = response.json()
+    payload = reddit_get_json(
+        url=url,
+        headers=headers,
+        params=params,
+        timeout=timeout,
+        max_retries=max_retries,
+        request_delay=request_delay,
+    )
     children = payload.get("data", {}).get("children", [])
 
     posts: list[dict[str, Any]] = []
@@ -119,36 +127,228 @@ def extract_submission_fields(post_data: dict[str, Any]) -> dict[str, str]:
         "post_id": post_id,
         "title": title,
         "body_text": body_text,
+        "permalink": permalink,
         "post_url": post_url,
         "timestamp": timestamp,
     }
 
 
-def evaluate_post_relevance(title: str, body_text: str) -> bool:
-    content = f"{title}\n\n{body_text}".strip()
+def truncate_for_classification(content: str, max_chars: int = MAX_CLASSIFY_CHARS) -> str:
+    content = content.strip()
+    if len(content) <= max_chars:
+        return content
+    return content[:max_chars].rsplit(" ", 1)[0].strip()
+
+
+def classify_relevance(content: str) -> tuple[str, float]:
     if not content:
-        return False
+        return "", 0.0
 
     result = classifier(
-        content,
+        truncate_for_classification(content),
         candidate_labels=[RELEVANT_LABEL, OTHER_LABEL],
         multi_label=False,
     )
     labels = result.get("labels", [])
     scores = result.get("scores", [])
     if not labels or not scores:
-        return False
+        return "", 0.0
 
     top_label = str(labels[0])
     top_score = float(scores[0])
-    return top_label == RELEVANT_LABEL and top_score > RELEVANCE_THRESHOLD
+    return top_label, top_score
 
 
-def to_incident_payload(extracted: dict[str, str]) -> dict[str, Any]:
+def collect_comment_bodies(
+    children: list[dict[str, Any]],
+    bucket: list[str],
+    max_items: int,
+) -> None:
+    if len(bucket) >= max_items:
+        return
+    for child in children:
+        if len(bucket) >= max_items:
+            return
+        if not isinstance(child, dict):
+            continue
+        kind = child.get("kind")
+        data = child.get("data", {})
+        if kind != "t1" or not isinstance(data, dict):
+            continue
+
+        body = str(data.get("body") or "").strip()
+        if body and body not in {"[deleted]", "[removed]"}:
+            bucket.append(body)
+
+        replies = data.get("replies")
+        if isinstance(replies, dict):
+            reply_children = replies.get("data", {}).get("children", [])
+            if isinstance(reply_children, list):
+                collect_comment_bodies(reply_children, bucket, max_items)
+
+
+def fetch_post_comments(
+    permalink: str,
+    user_agent: str,
+    comment_limit: int,
+    timeout: int = DEFAULT_TIMEOUT,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    request_delay: float = DEFAULT_REQUEST_DELAY,
+) -> list[str]:
+    if not permalink:
+        return []
+    comments_url = (
+        f"{REDDIT_BASE_URL}{permalink}.json"
+        if permalink.startswith("/")
+        else f"{REDDIT_BASE_URL}{permalink}"
+    )
+    headers = {"User-Agent": user_agent}
+    params = {"limit": max(1, comment_limit), "depth": 2, "sort": "new"}
+
+    payload = reddit_get_json(
+        url=comments_url,
+        headers=headers,
+        params=params,
+        timeout=timeout,
+        max_retries=max_retries,
+        request_delay=request_delay,
+    )
+    if not isinstance(payload, list) or len(payload) < 2:
+        return []
+    comments_listing = payload[1]
+    if not isinstance(comments_listing, dict):
+        return []
+    children = comments_listing.get("data", {}).get("children", [])
+    if not isinstance(children, list):
+        return []
+
+    comments: list[str] = []
+    collect_comment_bodies(children, comments, max_items=max(1, comment_limit))
+    return comments
+
+
+def evaluate_post_relevance(
+    title: str,
+    body_text: str,
+    comment_texts: list[str] | None = None,
+) -> tuple[bool, str]:
+    post_content = f"{title}\n\n{body_text}".strip()
+    top_label, top_score = classify_relevance(post_content)
+    if top_label == RELEVANT_LABEL and top_score > RELEVANCE_THRESHOLD:
+        return True, "post"
+
+    if comment_texts:
+        comment_blob = "\n".join(comment_texts).strip()
+        enriched_content = f"{post_content}\n\nComments:\n{comment_blob}".strip()
+        top_label, top_score = classify_relevance(enriched_content)
+        if top_label == RELEVANT_LABEL and top_score > RELEVANCE_THRESHOLD:
+            return True, "comments"
+
+    return False, ""
+
+
+def parse_retry_after_seconds(raw_retry_after: str | None) -> float | None:
+    if raw_retry_after is None:
+        return None
+    try:
+        retry_after = float(raw_retry_after)
+    except (TypeError, ValueError):
+        return None
+    if retry_after < 0:
+        return None
+    return retry_after
+
+
+def compute_backoff_seconds(attempt: int, retry_after: str | None = None) -> float:
+    parsed_retry_after = parse_retry_after_seconds(retry_after)
+    if parsed_retry_after is not None:
+        return max(parsed_retry_after, 0.5)
+
+    base = DEFAULT_BACKOFF_BASE_SECONDS * (2**attempt)
+    jitter = random.uniform(0.0, 0.75)
+    return max(base + jitter, 0.5)
+
+
+def reddit_get_json(
+    url: str,
+    headers: dict[str, str],
+    params: dict[str, Any],
+    timeout: int = DEFAULT_TIMEOUT,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    request_delay: float = DEFAULT_REQUEST_DELAY,
+) -> Any:
+    retries = max(0, max_retries)
+    last_error: Exception | None = None
+
+    for attempt in range(retries + 1):
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=timeout)
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt >= retries:
+                break
+            wait_seconds = compute_backoff_seconds(attempt)
+            print(
+                f"Reddit request failed ({exc.__class__.__name__}). "
+                f"Retrying in {wait_seconds:.2f}s (attempt {attempt + 1}/{retries}).",
+                file=sys.stderr,
+            )
+            time.sleep(wait_seconds)
+            continue
+
+        if response.status_code == 429:
+            if attempt >= retries:
+                raise RuntimeError(
+                    "Reddit returned HTTP 429 (Too Many Requests). "
+                    "Use a unique User-Agent and reduce request frequency."
+                )
+            wait_seconds = compute_backoff_seconds(
+                attempt=attempt,
+                retry_after=response.headers.get("Retry-After"),
+            )
+            print(
+                f"Reddit rate-limited request (429). "
+                f"Retrying in {wait_seconds:.2f}s (attempt {attempt + 1}/{retries}).",
+                file=sys.stderr,
+            )
+            time.sleep(wait_seconds)
+            continue
+
+        if response.status_code >= 500:
+            if attempt >= retries:
+                response.raise_for_status()
+            wait_seconds = compute_backoff_seconds(attempt)
+            print(
+                f"Reddit server error {response.status_code}. "
+                f"Retrying in {wait_seconds:.2f}s (attempt {attempt + 1}/{retries}).",
+                file=sys.stderr,
+            )
+            time.sleep(wait_seconds)
+            continue
+
+        response.raise_for_status()
+        if request_delay > 0:
+            time.sleep(request_delay)
+        return response.json()
+
+    if last_error is not None:
+        raise RuntimeError(f"Reddit request failed after retries: {last_error}") from last_error
+    raise RuntimeError("Reddit request failed after retries.")
+
+
+def to_incident_payload(
+    extracted: dict[str, str],
+    comment_texts: list[str] | None = None,
+) -> dict[str, Any]:
     post_id = extracted["post_id"]
     title = extracted["title"]
     body_text = extracted["body_text"]
-    raw_text = f"{title}\n\n{body_text}".strip()
+    raw_parts = [title, body_text]
+    if comment_texts:
+        comments_block = "\n".join(f"- {comment}" for comment in comment_texts if comment)
+        if comments_block:
+            raw_parts.append(f"Comments:\n{comments_block}")
+    raw_text = "\n\n".join(part for part in raw_parts if part).strip()
     dedupe_key = f"reddit_{post_id}" if post_id else "reddit_unknown"
 
     return {
@@ -160,7 +360,6 @@ def to_incident_payload(extracted: dict[str, str]) -> dict[str, Any]:
         "timestamp_text": extracted["timestamp"] or None,
         "normalized_time": extracted["timestamp"] or None,
         "dedupe_key": dedupe_key,
-        "workflow_stage": "crawl",
         "status": "queued",
     }
 
@@ -190,16 +389,25 @@ def crawl_reddit_posts(
     user_agent: str = DEFAULT_USER_AGENT,
     latest_reddit_id: str | None = None,
     backfill: bool = False,
+    include_comments: bool = False,
+    comment_limit: int = DEFAULT_COMMENT_LIMIT,
+    request_delay: float = DEFAULT_REQUEST_DELAY,
+    max_retries: int = DEFAULT_MAX_RETRIES,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     posts = fetch_new_posts(
         subreddit_name=subreddit_name,
         limit=limit,
         user_agent=user_agent,
+        request_delay=request_delay,
+        max_retries=max_retries,
     )
     payloads: list[dict[str, Any]] = []
     scanned = 0
     passed_filter = 0
     stopped_at_checkpoint = False
+    comment_posts_checked = 0
+    comment_items_used = 0
+    relevant_from_comments = 0
 
     for post_data in posts:
         extracted = extract_submission_fields(post_data)
@@ -213,8 +421,34 @@ def crawl_reddit_posts(
             stopped_at_checkpoint = True
             break
 
-        if evaluate_post_relevance(extracted["title"], extracted["body_text"]):
-            payloads.append(to_incident_payload(extracted))
+        relevant, source = evaluate_post_relevance(extracted["title"], extracted["body_text"])
+        comment_texts: list[str] = []
+
+        if include_comments and not relevant:
+            comment_texts = fetch_post_comments(
+                permalink=extracted["permalink"],
+                user_agent=user_agent,
+                comment_limit=comment_limit,
+                request_delay=request_delay,
+                max_retries=max_retries,
+            )
+            comment_posts_checked += 1
+            comment_items_used += len(comment_texts)
+            relevant, source = evaluate_post_relevance(
+                extracted["title"],
+                extracted["body_text"],
+                comment_texts=comment_texts,
+            )
+
+        if relevant:
+            if source == "comments":
+                relevant_from_comments += 1
+            payloads.append(
+                to_incident_payload(
+                    extracted,
+                    comment_texts=comment_texts if include_comments else None,
+                )
+            )
             passed_filter += 1
 
     stats = {
@@ -222,6 +456,9 @@ def crawl_reddit_posts(
         "scanned": scanned,
         "stopped_at_checkpoint": stopped_at_checkpoint,
         "passed_filter": passed_filter,
+        "comment_posts_checked": comment_posts_checked,
+        "comment_items_used": comment_items_used,
+        "relevant_from_comments": relevant_from_comments,
     }
     return payloads, stats
 
@@ -278,7 +515,45 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help=(
             "Print crawler diagnostics to stderr "
-            "(fetched, scanned, stopped_at_checkpoint, passed_filter)."
+            "("
+            "fetched, scanned, stopped_at_checkpoint, passed_filter, "
+            "comment_posts_checked, comment_items_used, relevant_from_comments"
+            ")."
+        ),
+    )
+    parser.add_argument(
+        "--include-comments",
+        action="store_true",
+        help=(
+            "Fetch and analyze comments for posts that fail initial relevance "
+            "classification."
+        ),
+    )
+    parser.add_argument(
+        "--comment-limit",
+        type=int,
+        default=DEFAULT_COMMENT_LIMIT,
+        help=(
+            "Max number of comment bodies to consider per post when "
+            f"--include-comments is enabled (default: {DEFAULT_COMMENT_LIMIT})."
+        ),
+    )
+    parser.add_argument(
+        "--request-delay",
+        type=float,
+        default=DEFAULT_REQUEST_DELAY,
+        help=(
+            "Delay in seconds after each successful Reddit request. "
+            f"Increase this if you hit 429 (default: {DEFAULT_REQUEST_DELAY})."
+        ),
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=DEFAULT_MAX_RETRIES,
+        help=(
+            "Max retry attempts for Reddit HTTP 429/network/server errors "
+            f"(default: {DEFAULT_MAX_RETRIES})."
         ),
     )
     return parser.parse_args()
@@ -304,6 +579,10 @@ def main() -> None:
         user_agent=args.user_agent,
         latest_reddit_id=latest_reddit_id,
         backfill=args.backfill,
+        include_comments=args.include_comments,
+        comment_limit=max(1, args.comment_limit),
+        request_delay=max(0.0, args.request_delay),
+        max_retries=max(0, args.max_retries),
     )
     if args.upload:
         upload_to_supabase(payloads, supabase=supabase)
