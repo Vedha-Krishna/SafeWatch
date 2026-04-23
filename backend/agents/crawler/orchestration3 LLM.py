@@ -390,7 +390,7 @@ def decision_node(state: State) -> dict:
     ):
         state["decision"] = "publish"
 
-    elif state["retry_count"] >= 5:
+    elif state["retry_count"] >= 2:
         state["decision"] = "reject"
 
     else:
@@ -403,6 +403,11 @@ def decision_node(state: State) -> dict:
             "reason": f"Low authenticity score: {state['authenticity_score']}"
         })
         state["decision"] = "needs_retry"
+
+    state["messages"].append({
+        "agent": "decision",
+        "note": f"Final decision: {state['decision']} based on authenticity score {state['authenticity_score']}"
+    })
 
     return state
 
@@ -522,18 +527,45 @@ if __name__ == "__main__":
         final_state = run_pipeline_for_1_post(post)
         all_results.append(final_state)
 
-    print("\n=== FINAL RESULTS ===\n")
+    print("\n=== INCIDENT RESULTS ===\n")
+
+    accepted = 0
+    rejected = 0
+
     for result in all_results:
-        print(f"Retry Count: {result['retry_count']}")
+        if result["decision"] == "publish":
+            accepted += 1
+        elif result["decision"] == "reject":
+            rejected += 1
+
         print(f"Incident ID: {result['incident_id']}")
-        print(f"Decision: {result['decision']}")
+        print(f"Decision: {result['decision'].upper()}")
         print(f"Category: {result['category']}")
-        print(f"Authenticity: {result['authenticity_score']}")
+        print(f"Authenticity Score: {round(result['authenticity_score'], 2)}")
         print(f"Severity: {result['severity']}")
         print(f"Location: {result['location']}")
         print(f"Time: {result['time']}")
         print(f"Action: {result['action']}")
-        print("Agent Messages:")
-        for note in result["messages"]:
-            print(f"  - {note}")
-        print("-" * 50)
+
+        # 🔥 Show ONLY key reasoning (not spam)
+        last_reasoning = None
+        for msg in reversed(result["messages"]):
+            if "llm_reasoning" in msg:
+                last_reasoning = msg["llm_reasoning"]
+                break
+
+        if last_reasoning:
+            print(f"LLM Reasoning: {last_reasoning}")
+
+        print("-" * 40)
+
+    print("\n=== SUMMARY ===\n")
+
+    total = len(all_results)
+
+    print(f"Total Incidents: {total}")
+    print(f"Accepted (Published): {accepted}")
+    print(f"Rejected: {rejected}")
+
+    if total > 0:
+        print(f"Acceptance Rate: {round((accepted / total) * 100, 1)}%")
