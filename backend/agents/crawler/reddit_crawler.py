@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 from transformers import pipeline
 
 DEFAULT_SUBREDDIT = "singapore"
-DEFAULT_LIMIT = 50
+DEFAULT_INCREMENTAL_LIMIT = 25
+DEFAULT_BACKFILL_LIMIT = 100
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) OSINT-Hackathon-Bot/1.0"
 )
@@ -25,6 +26,44 @@ classifier = pipeline(
     "zero-shot-classification",
     model="facebook/bart-large-mnli",
 )
+
+
+def get_supabase_client():
+    try:
+        from supabase import create_client
+    except ImportError as exc:
+        raise RuntimeError(
+            "Supabase SDK is not installed. Install it with `pip install supabase`."
+        ) from exc
+
+    load_dotenv()
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+
+    if not supabase_url or not supabase_key:
+        raise RuntimeError(
+            "Missing Supabase credentials. Set SUPABASE_URL and SUPABASE_KEY."
+        )
+
+    return create_client(supabase_url, supabase_key)
+
+
+def get_latest_reddit_id(supabase: Any) -> str | None:
+    """Return the most recent stored Reddit source_item_id checkpoint."""
+    response = (
+        supabase.table("incidents")
+        .select("source_item_id")
+        .eq("source_platform", "reddit")
+        .order("created_at", desc=True)
+        .limit(50)
+        .execute()
+    )
+
+    for row in response.data or []:
+        source_item_id = str(row.get("source_item_id") or "").strip()
+        if source_item_id:
+            return source_item_id
+    return None
 
 
 def fetch_new_posts(
@@ -121,34 +160,16 @@ def to_incident_payload(extracted: dict[str, str]) -> dict[str, Any]:
         "normalized_time": extracted["timestamp"] or None,
         "dedupe_key": dedupe_key,
         "workflow_stage": "crawl",
-        "current_agent": "crawler",
-        "next_agent": "cleaner",
         "status": "queued",
     }
 
 
-def upload_to_supabase(payloads: list[dict]) -> int:
+def upload_to_supabase(payloads: list[dict], supabase: Any | None = None) -> int:
     """Upsert incident payloads into Supabase using dedupe_key conflict handling."""
     if not payloads:
         return 0
 
-    try:
-        from supabase import create_client
-    except ImportError as exc:
-        raise RuntimeError(
-            "Supabase SDK is not installed. Install it with `pip install supabase`."
-        ) from exc
-
-    load_dotenv()
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_KEY")
-
-    if not supabase_url or not supabase_key:
-        raise RuntimeError(
-            "Missing Supabase credentials. Set SUPABASE_URL and SUPABASE_KEY."
-        )
-
-    client = create_client(supabase_url, supabase_key)
+    client = supabase or get_supabase_client()
     inserted = 0
 
     for payload in payloads:
@@ -164,8 +185,10 @@ def upload_to_supabase(payloads: list[dict]) -> int:
 
 def crawl_reddit_posts(
     subreddit_name: str = DEFAULT_SUBREDDIT,
-    limit: int = DEFAULT_LIMIT,
+    limit: int = DEFAULT_INCREMENTAL_LIMIT,
     user_agent: str = DEFAULT_USER_AGENT,
+    latest_reddit_id: str | None = None,
+    backfill: bool = False,
 ) -> list[dict[str, Any]]:
     posts = fetch_new_posts(
         subreddit_name=subreddit_name,
@@ -176,6 +199,14 @@ def crawl_reddit_posts(
 
     for post_data in posts:
         extracted = extract_submission_fields(post_data)
+        if (
+            not backfill
+            and latest_reddit_id
+            and extracted["post_id"]
+            and extracted["post_id"] == latest_reddit_id
+        ):
+            break
+
         if evaluate_post_relevance(extracted["title"], extracted["body_text"]):
             payloads.append(to_incident_payload(extracted))
 
@@ -197,8 +228,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--limit",
         type=int,
-        default=DEFAULT_LIMIT,
-        help=f"Maximum posts to return (default: {DEFAULT_LIMIT})",
+        default=None,
+        help=(
+            "Optional override for incremental mode only. "
+            f"Default incremental={DEFAULT_INCREMENTAL_LIMIT}. Ignored with --backfill."
+        ),
     )
     parser.add_argument(
         "--user-agent",
@@ -206,6 +240,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "User-Agent header sent to Reddit. "
             "A custom value is required to avoid 429 errors."
+        ),
+    )
+    parser.add_argument(
+        "--backfill",
+        action="store_true",
+        help=(
+            "Run backfill mode: ignore checkpoint and process "
+            f"up to {DEFAULT_BACKFILL_LIMIT} newest posts."
         ),
     )
     parser.add_argument(
@@ -223,13 +265,27 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    effective_limit = (
+        DEFAULT_BACKFILL_LIMIT
+        if args.backfill
+        else (args.limit if args.limit is not None else DEFAULT_INCREMENTAL_LIMIT)
+    )
+
+    supabase = None
+    latest_reddit_id = None
+    if not args.backfill:
+        supabase = get_supabase_client()
+        latest_reddit_id = get_latest_reddit_id(supabase)
+
     payloads = crawl_reddit_posts(
         subreddit_name=args.subreddit,
-        limit=args.limit,
+        limit=effective_limit,
         user_agent=args.user_agent,
+        latest_reddit_id=latest_reddit_id,
+        backfill=args.backfill,
     )
     if args.upload:
-        upload_to_supabase(payloads)
+        upload_to_supabase(payloads, supabase=supabase)
 
     print(
         json.dumps(

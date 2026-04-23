@@ -66,15 +66,15 @@ def get_openai_client() -> "OpenAI":
 def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
     """
     Claim one incident for cleaning.
-    Selection rule: status='queued' AND next_agent='cleaner'.
+    Selection rule: status='queued' AND workflow_stage='crawl'.
     Lock rule: set status='in_progress' and locked_by='cleaner_agent'.
     """
     now_iso = datetime.now(timezone.utc).isoformat()
     response = (
         supabase.table("incidents")
-        .select("incident_id, raw_text, status, next_agent")
+        .select("incident_id, raw_text, status, workflow_stage")
         .eq("status", "queued")
-        .eq("next_agent", "cleaner")
+        .eq("workflow_stage", "crawl")
         .is_("locked_by", "null")
         .lte("available_at", now_iso)
         .order("created_at", desc=False)
@@ -93,7 +93,6 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
 
         lock_payload = {
             "status": "in_progress",
-            "current_agent": "cleaner",
             "locked_by": "cleaner_agent",
             "locked_at": now_iso,
         }
@@ -102,7 +101,7 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
             .update(lock_payload)
             .eq("incident_id", incident_id)
             .eq("status", "queued")
-            .eq("next_agent", "cleaner")
+            .eq("workflow_stage", "crawl")
             .is_("locked_by", "null")
             .execute()
         )
@@ -154,8 +153,6 @@ def update_and_handoff(
         "cleaned_content": cleaned_incident.cleaned_content,
         "topic_bucket": cleaned_incident.topic_bucket,
         "workflow_stage": "clean",
-        "current_agent": "cleaner",
-        "next_agent": "classifier",
         "status": "queued",
         "locked_by": None,
         "locked_at": None,
@@ -167,7 +164,6 @@ def mark_failed(supabase: Any, incident_id: Any, _error_message: str) -> None:
     supabase.table("incidents").update(
         {
             "status": "failed",
-            "current_agent": "cleaner",
             "locked_by": None,
             "locked_at": None,
             "last_error": _error_message[:1000],
