@@ -95,17 +95,7 @@ export default function IncidentDetailPanel() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                 <AnalysisRow
                   label="Classification"
-                  value={
-                    <>
-                      {incident.agent_analysis.classification}{" "}
-                      <span className="text-slate-500 font-mono">
-                        ({Math.round(
-                          incident.agent_analysis.classification_confidence * 100,
-                        )}
-                        %)
-                      </span>
-                    </>
-                  }
+                  value={incident.agent_analysis.classification}
                 />
                 <AnalysisRow
                   label="Validation"
