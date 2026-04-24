@@ -213,7 +213,7 @@ export default function MapView() {
 
       <div className="safewatch-vignette pointer-events-none absolute inset-0" />
 
-      <div className="absolute top-16 left-3 z-[1000] flex flex-col gap-2">
+      <div className="absolute top-[7.25rem] sm:top-16 left-2 sm:left-3 z-[1000] flex flex-col gap-2">
         <RecenterStandalone onRecenter={handleRecenter} />
         <div className="relative">
           <button
@@ -261,7 +261,7 @@ export default function MapView() {
       </div>
 
       {/* Heatmap legend — count-based */}
-      <div className="absolute bottom-3 left-3 z-[1000] safewatch-glass-panel rounded-2xl sm:rounded-full px-2.5 py-2 sm:px-3 sm:py-1.5 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 text-[10px] font-mono">
+      <div className="hidden sm:flex absolute bottom-3 left-3 z-[1000] safewatch-glass-panel rounded-full px-3 py-1.5 flex-row items-center gap-3 text-[10px] font-mono">
         <span className="text-slate-400 uppercase tracking-wider">Density</span>
         {HEAT_LEGEND.map((h) => {
           const heat = getHeat(h.count);

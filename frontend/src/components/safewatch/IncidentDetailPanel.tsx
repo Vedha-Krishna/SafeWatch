@@ -29,26 +29,29 @@ export default function IncidentDetailPanel() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: "100%", opacity: 0 }}
           transition={{ type: "spring", damping: 28, stiffness: 220 }}
-          className="absolute bottom-0 left-0 right-0 z-[1100] max-h-[70%] sm:max-h-[45%] overflow-y-auto safewatch-scroll bg-[#0d1117]/85 backdrop-blur-xl border-t border-white/10 shadow-2xl"
+          className="absolute bottom-0 left-0 right-0 z-[1100] max-h-[76dvh] sm:max-h-[45%] overflow-y-auto safewatch-scroll bg-[#0d1117]/90 backdrop-blur-xl border-t border-white/10 shadow-2xl rounded-t-2xl sm:rounded-none"
         >
           <button
             onClick={handleClose}
-            className="absolute top-3 right-3 p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-white/5 transition-colors z-10"
+            className="absolute top-3 right-3 p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/5 transition-colors z-10"
+            aria-label="Close incident details"
           >
             <X className="w-4 h-4" />
           </button>
 
-          <div className="p-3 sm:p-5 space-y-3 sm:space-y-4">
+          <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-white/15 sm:hidden" />
+
+          <div className="p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:p-5 space-y-3 sm:space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 pr-10">
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+              <div className="flex items-start sm:items-center gap-2 sm:gap-3 min-w-0">
                 <span
-                  className="w-3 h-3 rounded-full shrink-0"
+                  className="w-3 h-3 rounded-full shrink-0 mt-1 sm:mt-0"
                   style={{
                     backgroundColor: SEVERITY_COLOR[incident.severity],
                     boxShadow: `0 0 12px ${SEVERITY_COLOR[incident.severity]}`,
                   }}
                 />
-                <h2 className="text-base sm:text-xl font-bold text-white font-mono uppercase tracking-wide truncate">
+                <h2 className="text-base sm:text-xl font-bold text-white font-mono uppercase tracking-wide leading-snug break-words sm:truncate">
                   {incident.title}
                 </h2>
               </div>
@@ -64,36 +67,38 @@ export default function IncidentDetailPanel() {
               </span>
             </div>
 
-            <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-400 font-mono">
-              <span className="flex items-center gap-1.5">
+            <div className="grid gap-1.5 sm:flex sm:flex-wrap sm:gap-x-5 text-xs text-slate-400 font-mono">
+              <span className="flex items-start gap-1.5 min-w-0">
                 <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                {incident.location.area}
+                <span className="min-w-0 break-words">{incident.location.area}</span>
               </span>
-              <span className="flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-slate-500" />
-                Posted {timeAgo(incident.timestamp)} - {formatTimestamp(incident.timestamp)}
+              <span className="flex items-start gap-1.5 min-w-0">
+                <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                <span className="min-w-0 break-words">
+                  Posted {timeAgo(incident.timestamp)} - {formatTimestamp(incident.timestamp)}
+                </span>
               </span>
-              <span className="flex items-center gap-1.5">
-                <Radio className="w-3.5 h-3.5 text-slate-500" />
+              <span className="flex items-start gap-1.5 min-w-0">
+                <Radio className="w-3.5 h-3.5 text-slate-500 shrink-0" />
                 {sourceUrl ? (
                   <a
                     href={sourceUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200 transition-colors underline decoration-blue-400/40 underline-offset-2"
+                    className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200 transition-colors underline decoration-blue-400/40 underline-offset-2 min-w-0"
                     title={`Open source post on ${incident.source}`}
                   >
-                    Source: {incident.source}
-                    <ExternalLink className="w-3 h-3" />
+                    <span className="truncate">Source: {incident.source}</span>
+                    <ExternalLink className="w-3 h-3 shrink-0" />
                   </a>
                 ) : (
-                  <span>Source: {incident.source}</span>
+                  <span className="min-w-0 break-words">Source: {incident.source}</span>
                 )}
               </span>
             </div>
 
             <Section title="Description">
-              <p className="text-sm text-slate-200 italic">
+              <p className="text-sm text-slate-200 italic leading-relaxed">
                 "{incident.description}"
               </p>
             </Section>
