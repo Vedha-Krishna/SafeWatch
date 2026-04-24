@@ -11,9 +11,11 @@ export interface AgentMessage {
 export interface AgentLog {
   id: string;
   incident_id?: string | null;
+  cleaned_content?: string | null;
   raw_text?: string | null;
   scraped_at: string;
   source: string;
+  source_url?: string | null;
   decision: AgentDecision;
   decision_reason?: string | null;
   messages: AgentMessage[];
@@ -21,7 +23,7 @@ export interface AgentLog {
 
 export const DECISION_COLOR: Record<AgentDecision, string> = {
   ACCEPTED: "#22c55e",
-  REJECTED: "#f97316",
+  REJECTED: "#ef4444",
 };
 
 
@@ -32,7 +34,9 @@ export interface Incident {
   title: string;
   description: string;
   location: { area: string; lat: number; lng: number };
+  hasMapLocation: boolean;
   source: string;
+  source_url?: string | null;
   verified: boolean;
   confidence: number;
   timestamp: string;
@@ -77,7 +81,9 @@ function ai(
   return {
     id, type, severity, title, description,
     location: { area, lat, lng },
+    hasMapLocation: true,
     source, verified, confidence, timestamp, cluster_id,
+    source_url: null,
   };
 }
 

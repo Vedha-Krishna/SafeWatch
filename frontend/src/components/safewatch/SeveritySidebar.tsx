@@ -7,7 +7,7 @@ import {
   ChevronUp,
   MapPinOff,
 } from "lucide-react";
-import { useFilteredIncidents, useStore, timeAgo } from "./store";
+import { getAreaCenter, useFilteredIncidents, useStore, timeAgo } from "./store";
 import {
   SEVERITY_COLOR,
   SEVERITY_LABEL,
@@ -23,6 +23,12 @@ const SEVERITY_ORDER: Record<Severity, number> = {
 };
 
 const NO_LOCATION_COLOR = "#f59e0b";
+const DASHBOARD_FLY_ZOOM = 14;
+
+function toAreaLevelCoord(value: number): number {
+  // ~1 km precision (privacy-friendly, less "exact pin" feel)
+  return Math.round(value * 100) / 100;
+}
 
 export default function SeveritySidebar() {
   const filtered = useFilteredIncidents();
@@ -49,16 +55,16 @@ export default function SeveritySidebar() {
     if (severityFilter === "critical_only")
       return sorted.filter((i) => i.severity === "critical");
     if (severityFilter === "no_location")
-      return sorted.filter((i) => i.location.area === "Singapore");
-    return sorted.filter((i) => i.location.area !== "Singapore");
+      return sorted.filter((i) => !i.hasMapLocation);
+    return sorted.filter((i) => i.hasMapLocation);
   }, [sorted, severityFilter]);
 
   const noLocationCount = useMemo(
-    () => sorted.filter((i) => i.location.area === "Singapore").length,
+    () => sorted.filter((i) => !i.hasMapLocation).length,
     [sorted],
   );
   const mappedLocationCount = useMemo(
-    () => sorted.filter((i) => i.location.area !== "Singapore").length,
+    () => sorted.filter((i) => i.hasMapLocation).length,
     [sorted],
   );
   const criticalCount = useMemo(
@@ -161,11 +167,16 @@ export default function SeveritySidebar() {
                 <IncidentCard
                   key={inc.id}
                   incident={inc}
-                  noLocation={severityFilter === "no_location"}
+                  noLocation={!inc.hasMapLocation}
                   onClick={() => {
                     selectIncident(inc.id);
-                    if (severityFilter !== "no_location") {
-                      flyTo(inc.location.lat, inc.location.lng, 16);
+                    const areaCenter = getAreaCenter(inc.location.area);
+                    if (areaCenter) {
+                      flyTo(
+                        toAreaLevelCoord(areaCenter[0]),
+                        toAreaLevelCoord(areaCenter[1]),
+                        DASHBOARD_FLY_ZOOM,
+                      );
                     }
                   }}
                 />
