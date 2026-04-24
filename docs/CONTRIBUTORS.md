@@ -75,9 +75,9 @@
 ## 🧠 LangGraph Pipeline (Ameer)
 
 - [x] LangGraph graph built
-- [ ] Wire pipeline to FastAPI
-- [ ] Pipeline writes results to Supabase
-- [ ] API endpoint to trigger pipeline
+- [x] Wire pipeline to FastAPI
+- [x] Pipeline writes results to Supabase
+- [x] API endpoint to trigger pipeline (`POST /api/pipeline/run`)
 
 ---
 
