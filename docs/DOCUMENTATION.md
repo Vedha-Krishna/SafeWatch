@@ -1115,6 +1115,8 @@ Decision   → Crawler      (e.g. "source metadata missing")
 
 Copy `.env.example` to `.env` and fill in your values.
 
+**Backend (`.env` in project root):**
+
 | Variable | Required | Description |
 |---|---|---|
 | `OPENAI_API_KEY` | Yes | OpenAI API key (used by all LLM agents) |
@@ -1125,6 +1127,17 @@ Copy `.env.example` to `.env` and fill in your values.
 | `REDDIT_USER_AGENT` | Optional | Custom User-Agent for Reddit requests |
 
 Without `SUPABASE_URL` and a key, the backend falls back to reading from `data/sample_posts.json` and the map shows mock data.
+
+**Frontend — Vercel / production (must use `NEXT_PUBLIC_` prefix):**
+
+Next.js only exposes environment variables to the browser bundle when they are prefixed with `NEXT_PUBLIC_`. The backend variables (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) are **not** accessible client-side. Add these separately in Vercel → Settings → Environment Variables:
+
+| Variable | Required | Description |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL (same value as `SUPABASE_URL`) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/public key (same value as `SUPABASE_ANON_KEY`) |
+
+Without these, the frontend throws `supabaseUrl is required` at runtime and the page fails to load. These are read by `frontend/src/lib/supabase.ts`.
 
 ---
 
@@ -1201,6 +1214,7 @@ Before running with a real database:
 | 6 | **Medium** | `langchain/cleaner.py` | The LangGraph pipeline's cleaner node only does whitespace normalization. It does not set `location_text` or `normalized_time` on `IncidentState`, and those fields don't exist in the TypedDict. |
 | 7 | **Medium** | `orchestration6_DB.py` | Classifier LLM calls do not set `temperature=0`, so results are non-deterministic across runs. |
 | 8 | **Low** | `frontend/store.ts` | The map always starts with mock data on first load, even when the backend is available. `fetchIncidents()` is called on mount but there is a brief flash of mock data. |
+| 10 | ~~**Fixed**~~ | `frontend/store.ts:207` | ~~TypeScript error: `data as DbRow[]` failed type check because Supabase may return `GenericStringError[]`. Fixed by casting through `unknown` first: `data as unknown as DbRow[]`.~~ |
 | 9 | **Low** | `db/mock_reports.py` | `find_similar_official_report` uses simple string matching and will miss semantically equivalent locations described with different wording. |
 
 ---
