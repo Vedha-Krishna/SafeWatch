@@ -230,6 +230,463 @@ LOCATION_HINTS = [
     "Yishun",
 ]
 
+LANDMARK_TO_AREA: dict[str, str] = {
+    # Orchard / Somerset / Dhoby Ghaut
+    "Lucky Plaza": "Orchard",
+    "ION Orchard": "Orchard",
+    "Plaza Singapura": "Orchard",
+    "Wheelock Place": "Orchard",
+    "Takashimaya": "Orchard",
+    "Ngee Ann City": "Orchard",
+    "Paragon": "Orchard",
+    "313 Somerset": "Orchard",
+    "Orchard Central": "Orchard",
+    "The Centrepoint": "Orchard",
+    "Wisma Atria": "Orchard",
+    "Far East Plaza": "Orchard",
+    "Mandarin Gallery": "Orchard",
+    "Orchard MRT": "Orchard",
+    "Somerset MRT": "Orchard",
+    "Dhoby Ghaut MRT": "Orchard",
+    "Istana": "Orchard",
+
+    # Bugis / Rochor / Bras Basah
+    "Bugis Junction": "Bugis",
+    "Bugis+": "Bugis",
+    "Bugis Street": "Bugis",
+    "Bugis MRT": "Bugis",
+    "National Library": "Bugis",
+    "Haji Lane": "Bugis",
+    "Arab Street": "Bugis",
+    "Sultan Mosque": "Bugis",
+    "Sim Lim Square": "Bugis",
+    "LASALLE College of the Arts": "Bugis",
+
+    # Chinatown / Outram
+    "Chinatown Point": "Chinatown",
+    "People's Park Complex": "Chinatown",
+    "Chinatown MRT": "Chinatown",
+    "Maxwell Food Centre": "Chinatown",
+    "Buddha Tooth Relic Temple": "Chinatown",
+    "Sri Mariamman Temple": "Chinatown",
+    "Hong Lim Park": "Chinatown",
+    "Outram Park MRT": "Chinatown",
+
+    # Tanjong Pagar / CBD / Marina Bay
+    "Suntec City": "Tanjong Pagar",
+    "Marina Bay Sands": "Tanjong Pagar",
+    "Marina Square": "Tanjong Pagar",
+    "Millenia Walk": "Tanjong Pagar",
+    "Raffles City": "Tanjong Pagar",
+    "Esplanade": "Tanjong Pagar",
+    "Merlion Park": "Tanjong Pagar",
+    "Gardens by the Bay": "Tanjong Pagar",
+    "Marina Bay MRT": "Tanjong Pagar",
+    "Bayfront MRT": "Tanjong Pagar",
+    "Raffles Place MRT": "Tanjong Pagar",
+    "City Hall MRT": "Tanjong Pagar",
+    "Tanjong Pagar MRT": "Tanjong Pagar",
+    "Lau Pa Sat": "Tanjong Pagar",
+    "One Raffles Place": "Tanjong Pagar",
+    "Marina One": "Tanjong Pagar",
+    "The Shoppes at Marina Bay Sands": "Tanjong Pagar",
+
+    # HarbourFront / Sentosa
+    "VivoCity": "HarbourFront",
+    "HarbourFront Centre": "HarbourFront",
+    "HarbourFront MRT": "HarbourFront",
+    "Sentosa": "HarbourFront",
+    "Universal Studios Singapore": "HarbourFront",
+    "Resorts World Sentosa": "HarbourFront",
+    "Siloso Beach": "HarbourFront",
+    "Palawan Beach": "HarbourFront",
+    "Tanjong Beach": "HarbourFront",
+    "S.E.A. Aquarium": "HarbourFront",
+
+    # Jurong East
+    "JEM": "Jurong East",
+    "Westgate": "Jurong East",
+    "IMM": "Jurong East",
+    "JCube": "Jurong East",
+    "Jurong East MRT": "Jurong East",
+    "Ng Teng Fong General Hospital": "Jurong East",
+    "Jurong Community Hospital": "Jurong East",
+    "Science Centre Singapore": "Jurong East",
+    "Chinese Garden": "Jurong East",
+    "Japanese Garden": "Jurong East",
+
+    # Jurong West / Boon Lay
+    "Jurong Point": "Jurong East",
+    "Boon Lay MRT": "Jurong East",
+    "Pioneer MRT": "Jurong East",
+    "Nanyang Technological University": "Jurong East",
+    "NTU": "Jurong East",
+    "Jurong West Sports Centre": "Jurong East",
+
+    # Clementi / West Coast
+    "The Clementi Mall": "Clementi",
+    "Clementi MRT": "Clementi",
+    "Clementi Bus Interchange": "Clementi",
+    "Singapore Polytechnic": "Clementi",
+    "SP": "Clementi",
+    "Ngee Ann Polytechnic": "Clementi",
+    "NP": "Clementi",
+    "SIM": "Clementi",
+    "Singapore Institute of Management": "Clementi",
+    "West Coast Plaza": "Clementi",
+    "West Coast Park": "Clementi",
+
+    # Queenstown / Alexandra / Buona Vista
+    "Queenstown MRT": "Queenstown",
+    "IKEA Alexandra": "Queenstown",
+    "Queensway Shopping Centre": "Queenstown",
+    "Alexandra Hospital": "Queenstown",
+    "Anchorpoint": "Queenstown",
+    "Dawson Place": "Queenstown",
+    "The Star Vista": "Queenstown",
+    "Buona Vista MRT": "Queenstown",
+    "one-north MRT": "Queenstown",
+    "Fusionopolis": "Queenstown",
+    "Biopolis": "Queenstown",
+    "National University of Singapore": "Queenstown",
+    "NUS": "Queenstown",
+    "NUH": "Queenstown",
+    "National University Hospital": "Queenstown",
+
+    # Bukit Timah
+    "Beauty World Centre": "Bukit Timah",
+    "Beauty World MRT": "Bukit Timah",
+    "King Albert Park MRT": "Bukit Timah",
+    "Bukit Timah Plaza": "Bukit Timah",
+    "Bukit Timah Shopping Centre": "Bukit Timah",
+    "Botanic Gardens": "Bukit Timah",
+    "Singapore Botanic Gardens": "Bukit Timah",
+    "Sixth Avenue": "Bukit Timah",
+    "Holland Village": "Bukit Timah",
+
+    # Bukit Batok
+    "West Mall": "Bukit Batok",
+    "Bukit Batok MRT": "Bukit Batok",
+    "Bukit Batok Nature Park": "Bukit Batok",
+    "Bukit Batok Swimming Complex": "Bukit Batok",
+    "Bukit Gombak MRT": "Bukit Batok",
+    "Little Guilin": "Bukit Batok",
+
+    # Choa Chu Kang
+    "Lot One": "Choa Chu Kang",
+    "Choa Chu Kang MRT": "Choa Chu Kang",
+    "Yew Tee Point": "Choa Chu Kang",
+    "Yew Tee MRT": "Choa Chu Kang",
+    "Keat Hong": "Choa Chu Kang",
+
+    # Woodlands
+    "Causeway Point": "Woodlands",
+    "Woodlands MRT": "Woodlands",
+    "Woodlands Bus Interchange": "Woodlands",
+    "Woodlands Civic Centre": "Woodlands",
+    "Woodlands Checkpoint": "Woodlands",
+    "Republic Polytechnic": "Woodlands",
+    "RP": "Woodlands",
+    "Admiralty MRT": "Woodlands",
+    "Marsiling MRT": "Woodlands",
+    "Woodlands North MRT": "Woodlands",
+    "Woodlands Waterfront Park": "Woodlands",
+
+    # Sembawang
+    "Sun Plaza": "Sembawang",
+    "Sembawang MRT": "Sembawang",
+    "Canberra Plaza": "Sembawang",
+    "Canberra MRT": "Sembawang",
+    "Sembawang Shopping Centre": "Sembawang",
+    "Sembawang Park": "Sembawang",
+
+    # Yishun
+    "Northpoint City": "Yishun",
+    "Yishun MRT": "Yishun",
+    "Yishun Bus Interchange": "Yishun",
+    "Khoo Teck Puat Hospital": "Yishun",
+    "KTPH": "Yishun",
+    "SAFRA Yishun": "Yishun",
+    "Yishun Park": "Yishun",
+
+    # Ang Mo Kio
+    "AMK Hub": "Ang Mo Kio",
+    "Ang Mo Kio MRT": "Ang Mo Kio",
+    "Ang Mo Kio Bus Interchange": "Ang Mo Kio",
+    "Bishan-Ang Mo Kio Park": "Ang Mo Kio",
+    "Mayflower MRT": "Ang Mo Kio",
+    "Lentor MRT": "Ang Mo Kio",
+
+    # Bishan
+    "Junction 8": "Bishan",
+    "Bishan MRT": "Bishan",
+    "Bishan Bus Interchange": "Bishan",
+    "Catholic High School": "Bishan",
+    "Raffles Institution": "Bishan",
+    "RI": "Bishan",
+
+    # Toa Payoh
+    "HDB Hub": "Toa Payoh",
+    "Toa Payoh MRT": "Toa Payoh",
+    "Toa Payoh Bus Interchange": "Toa Payoh",
+    "Toa Payoh Central": "Toa Payoh",
+    "SAFRA Toa Payoh": "Toa Payoh",
+    "Braddell MRT": "Toa Payoh",
+
+    # Novena
+    "Velocity": "Novena",
+    "Square 2": "Novena",
+    "Novena Square": "Novena",
+    "Novena MRT": "Novena",
+    "Tan Tock Seng Hospital": "Novena",
+    "TTSH": "Novena",
+    "Mount Elizabeth Novena Hospital": "Novena",
+    "United Square": "Novena",
+
+    # Serangoon
+    "NEX": "Serangoon",
+    "Serangoon MRT": "Serangoon",
+    "Serangoon Bus Interchange": "Serangoon",
+    "Chomp Chomp Food Centre": "Serangoon",
+    "Serangoon Garden": "Serangoon",
+    "Lorong Chuan MRT": "Serangoon",
+
+    # Hougang
+    "Hougang Mall": "Hougang",
+    "Hougang MRT": "Hougang",
+    "Hougang Bus Interchange": "Hougang",
+    "Heartland Mall": "Hougang",
+    "Kovan MRT": "Hougang",
+    "Hougang 1": "Hougang",
+
+    # Sengkang
+    "Compass One": "Sengkang",
+    "Sengkang MRT": "Sengkang",
+    "Sengkang Bus Interchange": "Sengkang",
+    "Rivervale Mall": "Sengkang",
+    "Seletar Mall": "Sengkang",
+    "Fernvale LRT": "Sengkang",
+    "Sengkang General Hospital": "Sengkang",
+    "SKH": "Sengkang",
+
+    # Punggol
+    "Waterway Point": "Punggol",
+    "Punggol MRT": "Punggol",
+    "Punggol Bus Interchange": "Punggol",
+    "Punggol Waterway Park": "Punggol",
+    "Oasis Terraces": "Punggol",
+    "Punggol Plaza": "Punggol",
+    "Coney Island": "Punggol",
+    "Punggol Digital District": "Punggol",
+    "Singapore Institute of Technology": "Punggol",
+    "SIT Punggol": "Punggol",
+
+    # Tampines
+    "Tampines Mall": "Tampines",
+    "Century Square": "Tampines",
+    "Tampines 1": "Tampines",
+    "Our Tampines Hub": "Tampines",
+    "Tampines MRT": "Tampines",
+    "Tampines Bus Interchange": "Tampines",
+    "Tampines West MRT": "Tampines",
+    "Tampines East MRT": "Tampines",
+    "IKEA Tampines": "Tampines",
+    "Courts Megastore": "Tampines",
+    "Giant Tampines": "Tampines",
+    "Temasek Polytechnic": "Tampines",
+    "TP": "Tampines",
+
+    # Pasir Ris
+    "White Sands": "Pasir Ris",
+    "Pasir Ris MRT": "Pasir Ris",
+    "Pasir Ris Bus Interchange": "Pasir Ris",
+    "Pasir Ris Park": "Pasir Ris",
+    "Downtown East": "Pasir Ris",
+    "E!Hub": "Pasir Ris",
+    "Wild Wild Wet": "Pasir Ris",
+
+    # Bedok
+    "Bedok Mall": "Bedok",
+    "Bedok Point": "Bedok",
+    "Bedok MRT": "Bedok",
+    "Bedok Bus Interchange": "Bedok",
+    "Bedok Reservoir": "Bedok",
+    "Bedok Reservoir MRT": "Bedok",
+    "Heartbeat@Bedok": "Bedok",
+    "East Village": "Bedok",
+    "Siglap Centre": "Bedok",
+
+    # Changi
+    "Changi Airport": "Changi",
+    "Jewel Changi Airport": "Changi",
+    "Terminal 1": "Changi",
+    "Terminal 2": "Changi",
+    "Terminal 3": "Changi",
+    "Terminal 4": "Changi",
+    "Changi Airport MRT": "Changi",
+    "Changi City Point": "Changi",
+    "Expo MRT": "Changi",
+    "Singapore Expo": "Changi",
+    "Changi Business Park": "Changi",
+    "Changi Village": "Changi",
+    "Changi Beach Park": "Changi",
+
+    # Geylang / Aljunied / Paya Lebar
+    "Paya Lebar Square": "Geylang",
+    "PLQ Mall": "Geylang",
+    "Paya Lebar Quarter": "Geylang",
+    "SingPost Centre": "Geylang",
+    "Paya Lebar MRT": "Geylang",
+    "Aljunied MRT": "Geylang",
+    "Geylang Serai Market": "Geylang",
+    "Tanjong Katong Complex": "Geylang",
+    "City Plaza": "Geylang",
+
+    # Marine Parade / East Coast / Katong
+    "Parkway Parade": "Marine Parade",
+    "Marine Parade MRT": "Marine Parade",
+    "East Coast Park": "Marine Parade",
+    "Katong Shopping Centre": "Marine Parade",
+    "i12 Katong": "Marine Parade",
+    "Katong V": "Marine Parade",
+    "Roxy Square": "Marine Parade",
+    "Marine Terrace MRT": "Marine Parade",
+
+    # Kallang / Lavender
+    "Kallang Wave Mall": "Kallang",
+    "Singapore Sports Hub": "Kallang",
+    "National Stadium": "Kallang",
+    "OCBC Arena": "Kallang",
+    "Kallang MRT": "Kallang",
+    "Stadium MRT": "Kallang",
+    "Lavender MRT": "Kallang",
+    "Aperia Mall": "Kallang",
+    "Golden Mile Complex": "Kallang",
+    "Golden Mile Food Centre": "Kallang",
+
+    # Little India / Farrer Park
+    "Mustafa Centre": "Little India",
+    "City Square Mall": "Little India",
+    "Little India MRT": "Little India",
+    "Farrer Park MRT": "Little India",
+    "Tekka Centre": "Little India",
+    "Sri Veeramakaliamman Temple": "Little India",
+
+    # Balestier / Whampoa
+    "Zhongshan Mall": "Balestier",
+    "Balestier Plaza": "Balestier",
+    "Whampoa Market": "Balestier",
+    "Mount Elizabeth Hospital": "Balestier",
+
+    # Bukit Panjang
+    "Hillion Mall": "Bukit Panjang",
+    "Bukit Panjang Plaza": "Bukit Panjang",
+    "Bukit Panjang MRT": "Bukit Panjang",
+    "Junction 10": "Bukit Panjang",
+    "Senja Cashew Community Club": "Bukit Panjang",
+
+    # Tengah
+    "Tengah Plantation MRT": "Tengah",
+    "Tengah Park MRT": "Tengah",
+    "Tengah Garden": "Tengah",
+
+    # Tuas
+    "Tuas Link MRT": "Tuas",
+    "Tuas West Road MRT": "Tuas",
+    "Tuas Crescent MRT": "Tuas",
+    "Tuas Checkpoint": "Tuas",
+
+    # Pioneer / Joo Koon
+    "Joo Koon MRT": "Pioneer",
+    "FairPrice Hub": "Pioneer",
+    "Singapore Discovery Centre": "Pioneer",
+    "SAFTI Military Institute": "Pioneer",
+
+    # Yio Chu Kang / Seletar
+    "Yio Chu Kang MRT": "Yio Chu Kang",
+    "Nanyang Polytechnic": "Yio Chu Kang",
+    "NYP": "Yio Chu Kang",
+    "Seletar Mall": "Sengkang",
+    "Seletar Aerospace Park": "Seletar",
+    "The Oval": "Seletar",
+
+    # MacPherson / Ubi / Tai Seng
+    "MacPherson MRT": "MacPherson",
+    "Tai Seng MRT": "MacPherson",
+    "Ubi MRT": "MacPherson",
+    "18 Tai Seng": "MacPherson",
+    "Paya Ubi Industrial Park": "MacPherson",
+
+    # Potong Pasir
+    "Potong Pasir MRT": "Potong Pasir",
+    "The Poiz Centre": "Potong Pasir",
+    "St Andrew's Village": "Potong Pasir",
+
+    # Bukit Merah / Redhill / Tiong Bahru
+    "Tiong Bahru Plaza": "Bukit Merah",
+    "Tiong Bahru MRT": "Bukit Merah",
+    "Redhill MRT": "Bukit Merah",
+    "Bukit Merah Central": "Bukit Merah",
+    "Alexandra Retail Centre": "Bukit Merah",
+    "ARC": "Bukit Merah",
+    "Mount Faber": "Bukit Merah",
+
+    # Commonwealth
+    "Commonwealth MRT": "Queenstown",
+    "Tanglin Halt": "Queenstown",
+
+    # Tanglin
+    "Tanglin Mall": "Tanglin",
+    "Dempsey Hill": "Tanglin",
+    "Gleneagles Hospital": "Tanglin",
+    "Napier MRT": "Tanglin",
+    "Orchard Boulevard MRT": "Tanglin",
+
+    # River Valley / Clarke Quay / Robertson Quay
+    "Great World": "River Valley",
+    "Great World MRT": "River Valley",
+    "Clarke Quay": "River Valley",
+    "Clarke Quay Central": "River Valley",
+    "Robertson Quay": "River Valley",
+    "Fort Canning Park": "River Valley",
+    "Fort Canning MRT": "River Valley",
+    "Liang Court": "River Valley",
+
+    # Bukit Timah / Newton
+    "Newton Food Centre": "Newton",
+    "Newton MRT": "Newton",
+    "United Square": "Novena",
+
+    # Mandai / Zoo
+    "Singapore Zoo": "Mandai",
+    "Night Safari": "Mandai",
+    "River Wonders": "Mandai",
+    "Bird Paradise": "Mandai",
+    "Mandai Wildlife Reserve": "Mandai",
+
+    # Lim Chu Kang
+    "Sungei Buloh Wetland Reserve": "Lim Chu Kang",
+    "Kranji Marshes": "Lim Chu Kang",
+    "Kranji Countryside": "Lim Chu Kang",
+    "Hay Dairies": "Lim Chu Kang",
+
+    # Central Water Catchment
+    "MacRitchie Reservoir": "Central Water Catchment",
+    "TreeTop Walk": "Central Water Catchment",
+    "Upper Seletar Reservoir": "Central Water Catchment",
+    "Lower Peirce Reservoir": "Central Water Catchment",
+
+    # Pulau Ubin
+    "Pulau Ubin": "Pulau Ubin",
+    "Chek Jawa": "Pulau Ubin",
+
+    # Southern Islands
+    "St John's Island": "Southern Islands",
+    "Kusu Island": "Southern Islands",
+    "Lazarus Island": "Southern Islands",
+    "Sisters' Islands": "Southern Islands",
+}
+
 SG_LOCATION_COORDS: dict[str, tuple[float, float]] = {
     "Ang Mo Kio":    (1.3691, 103.8454),
     "Bedok":         (1.3236, 103.9273),
@@ -336,6 +793,9 @@ def pick_category(scores: dict[str, float]) -> str | None:
 
 def extract_location(text: str) -> str | None:
     lowered = text.lower()
+    for landmark, area in LANDMARK_TO_AREA.items():
+        if landmark.lower() in lowered:
+            return area
     for location in LOCATION_HINTS:
         if location.lower() in lowered:
             return location

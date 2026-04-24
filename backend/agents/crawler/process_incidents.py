@@ -6,7 +6,10 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 # import pipeline function from orchestration
-from orchestration9_novector import run_pipeline_for_1_post
+try:
+    from .orchestration9_novector import run_pipeline_for_1_post
+except ImportError:
+    from orchestration9_novector import run_pipeline_for_1_post
 
 
 load_dotenv()
@@ -22,15 +25,20 @@ def get_supabase_client() -> Any:
     return create_client(supabase_url, supabase_key)
 
 
-def fetch_queued_incidents(supabase: Any) -> list[dict]:
-    response = (
+def fetch_queued_incidents(supabase: Any, limit: int | None = None) -> list[dict]:
+    query = (
         supabase.table("incidents")
         .select("*")
         .eq("status", "queued")
         .not_.is_("cleaned_content", "null")
         .is_("category", "null")
-        .execute()
+        .order("created_at", desc=False)
     )
+
+    if limit is not None and limit > 0:
+        query = query.limit(limit)
+
+    response = query.execute()
     return response.data or []
 
 
@@ -51,14 +59,19 @@ def db_row_to_pipeline_input(row: dict) -> dict:
 
 
 def update_incident_after_pipeline(supabase: Any, row_id: int, result: dict) -> None:
+    location_text = result.get("location_text") or result.get("location")
+    action_text = result.get("action_text") or result.get("action")
+    normalized_time = result.get("normalized_time") or result.get("timestamp_text")
+
     update_payload = {
         "category": result["category"],
         "category_score": result.get("category_score"),
         "authenticity_score": result["authenticity_score"],
         "severity": result["severity"],
-        "location_text": result.get("location_text"),
-        "timestamp_text": result.get("normalized_time"),
-        "action_text": result.get("action_text"),
+        "location_text": location_text,
+        "timestamp_text": normalized_time,
+        "normalized_time": normalized_time,
+        "action_text": action_text,
         "decision": result["decision"],
         "agent_messages": json.dumps(result["messages"], ensure_ascii=False),
         "status": "processed",
@@ -72,9 +85,14 @@ def update_incident_after_pipeline(supabase: Any, row_id: int, result: dict) -> 
     )
 
 
-def process_queued_incidents() -> None:
+def process_queued_incidents(max_incidents: int | None = None) -> dict[str, int]:
+    if max_incidents is not None and max_incidents <= 0:
+        print("Skipping incident processing because max_incidents is 0.")
+        return {"found": 0, "processed": 0, "failed": 0}
+
     supabase = get_supabase_client()
-    rows = fetch_queued_incidents(supabase)
+    rows = fetch_queued_incidents(supabase, limit=max_incidents)
+    stats = {"found": len(rows), "processed": 0, "failed": 0}
 
     print(f"Found {len(rows)} queued incidents.")
 
@@ -116,10 +134,14 @@ def process_queued_incidents() -> None:
                 f"decision={result['decision']} | "
                 f"category={result['category']}"
             )
+            stats["processed"] += 1
 
         except Exception as exc:
             print(f"Failed to process incident id={row.get('id')}: {exc}")
+            stats["failed"] += 1
+
+    return stats
 
 
 if __name__ == "__main__":
-    process_queued_incidents()
+    print(process_queued_incidents())

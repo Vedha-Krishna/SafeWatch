@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -8,7 +8,7 @@ import {
   Polygon,
   useMap,
 } from "react-leaflet";
-import { LatLngBounds, divIcon } from "leaflet";
+import { LatLngBounds, Marker as LeafletMarker, divIcon } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useFilteredIncidents, useStore, timeAgo } from "./store";
 import {
@@ -18,6 +18,7 @@ import {
   type Incident,
 } from "./mockData";
 import { Crosshair, Map as MapIcon } from "lucide-react";
+import AgentLogsPanel from "./AgentLogsPanel";
 
 // Singapore bounding box — locks panning to this region
 const SG_BOUNDS = new LatLngBounds([1.16, 103.6], [1.48, 104.1]);
@@ -96,9 +97,11 @@ function FlyController() {
   const flyTo = useStore((s) => s.mapFlyTo);
   useEffect(() => {
     if (flyTo) {
+      map.stop();
       map.flyTo([flyTo.lat, flyTo.lng], flyTo.zoom, {
-        duration: 1.6,
-        easeLinearity: 0.18,
+        animate: true,
+        duration: 1.25,
+        easeLinearity: 0.22,
       });
     }
   }, [flyTo, map]);
@@ -108,6 +111,8 @@ function FlyController() {
 export default function MapView() {
   const incidents = useFilteredIncidents();
   const { selectedIncidentId, selectIncident, flyTo } = useStore();
+  const logsOpen    = useStore((s) => s.agentLogsOpen);
+  const setLogsOpen = useStore((s) => s.setAgentLogsOpen);
   const [styleId, setStyleId] = useState<MapStyleId>("voyager");
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const [hoveredArea, setHoveredArea] = useState<string | null>(null);
@@ -120,6 +125,13 @@ export default function MapView() {
   useEffect(() => {
     if (!selectedIncidentId) setHoveredArea(null);
   }, [selectedIncidentId]);
+
+  const handleRecenter = () => {
+    setOpenArea(null);
+    setHoveredArea(null);
+    selectIncident(null);
+    flyTo(SG_CENTER[0], SG_CENTER[1], SG_ZOOM);
+  };
 
   return (
     <div className="relative w-full h-full overflow-hidden">
@@ -201,8 +213,8 @@ export default function MapView() {
 
       <div className="safewatch-vignette pointer-events-none absolute inset-0" />
 
-      <div className="absolute top-16 left-3 z-[1000] flex flex-col gap-2">
-        <RecenterStandalone />
+      <div className="absolute top-[7.25rem] sm:top-16 left-2 sm:left-3 z-[1000] flex flex-col gap-2">
+        <RecenterStandalone onRecenter={handleRecenter} />
         <div className="relative">
           <button
             onClick={() => setStyleMenuOpen((v) => !v)}
@@ -235,10 +247,21 @@ export default function MapView() {
             </div>
           )}
         </div>
+
+        <button
+          onClick={() => setLogsOpen(!logsOpen)}
+          className={`safewatch-control-btn ${logsOpen ? "is-active" : ""}`}
+          title="Show agent logs"
+          aria-label="Show agent logs"
+        >
+          <span className="font-mono text-sm leading-none">&gt;_</span>
+        </button>
+
+        <AgentLogsPanel />
       </div>
 
       {/* Heatmap legend — count-based */}
-      <div className="absolute bottom-3 left-3 z-[1000] safewatch-glass-panel rounded-2xl sm:rounded-full px-2.5 py-2 sm:px-3 sm:py-1.5 flex flex-col sm:flex-row sm:items-center gap-1.5 sm:gap-3 text-[10px] font-mono">
+      <div className="hidden sm:flex absolute bottom-3 left-3 z-[1000] safewatch-glass-panel rounded-full px-3 py-1.5 flex-row items-center gap-3 text-[10px] font-mono">
         <span className="text-slate-400 uppercase tracking-wider">Density</span>
         {HEAT_LEGEND.map((h) => {
           const heat = getHeat(h.count);
@@ -262,11 +285,10 @@ export default function MapView() {
   );
 }
 
-function RecenterStandalone() {
-  const flyTo = useStore((s) => s.flyTo);
+function RecenterStandalone({ onRecenter }: { onRecenter: () => void }) {
   return (
     <button
-      onClick={() => flyTo(SG_CENTER[0], SG_CENTER[1], SG_ZOOM)}
+      onClick={onRecenter}
       className="safewatch-control-btn"
       title="Recenter on Singapore"
     >
@@ -304,10 +326,11 @@ function useAreaAggregates(incidents: Incident[]): {
     const unmatched: Incident[] = [];
 
     for (const inc of incidents) {
-      // Skip incidents with no real location — shown in sidebar instead
-      if (inc.location.area === "Singapore") continue;
+      // Skip incidents with no mappable Singapore location — shown in sidebar instead.
+      if (!inc.hasMapLocation) continue;
       const name = matchPlanningAreaName(inc.location.area, knownNames);
       if (!name) {
+        // Unknown SG sub-location: keep a precise fallback pin.
         unmatched.push(inc);
         continue;
       }
@@ -351,6 +374,7 @@ function AreaPin({
   onHover: (hovering: boolean) => void;
   onIncidentClick: (inc: Incident) => void;
 }) {
+  const markerRef = useRef<LeafletMarker | null>(null);
   const count = area.incidents.length;
   const heat = getHeat(count);
   // Pin grows a bit with count, capped
@@ -378,10 +402,14 @@ function AreaPin({
 
   return (
     <Marker
+      ref={markerRef}
       position={area.centroid}
       icon={icon}
       eventHandlers={{
-        click: onOpen,
+        click: () => {
+          markerRef.current?.closeTooltip();
+          onOpen();
+        },
         mouseover: () => onHover(true),
         mouseout: () => onHover(false),
       }}
@@ -479,7 +507,11 @@ function AreaPin({
             {area.incidents.map((inc) => (
               <button
                 key={inc.id}
-                onClick={() => onIncidentClick(inc)}
+                onClick={() => {
+                  markerRef.current?.closePopup();
+                  onClose();
+                  onIncidentClick(inc);
+                }}
                 className="w-full text-left flex items-start gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-colors"
               >
                 <span
@@ -611,17 +643,94 @@ function loadPlanningAreas(): Promise<Map<string, PlanningGeom>> {
   return planningAreaPromise;
 }
 
+const NEIGHBOURHOOD_ALIASES: Record<string, string> = {
+  "LITTLE INDIA":    "ROCHOR",
+  "TEKKA":           "ROCHOR",
+  "KAMPONG GLAM":    "ROCHOR",
+  "ARAB STREET":     "ROCHOR",
+  "BUGIS":           "ROCHOR",
+  "BRAS BASAH":      "MUSEUM",
+  "DHOBY GHAUT":     "MUSEUM",
+  "CHINATOWN":       "OUTRAM",
+  "TANJONG PAGAR":   "OUTRAM",
+  "TIONG BAHRU":     "OUTRAM",
+  "TELOK BLANGAH":   "BUKIT MERAH",
+  "HARBOURFRONT":    "BUKIT MERAH",
+  "MARINA BAY":      "DOWNTOWN CORE",
+  "RAFFLES PLACE":   "DOWNTOWN CORE",
+  "SHENTON WAY":     "DOWNTOWN CORE",
+  "CLARKE QUAY":     "SINGAPORE RIVER",
+  "ROBERTSON QUAY":  "SINGAPORE RIVER",
+  "BOAT QUAY":       "SINGAPORE RIVER",
+  "HOLLAND VILLAGE": "QUEENSTOWN",
+  "KATONG":          "MARINE PARADE",
+  "EAST COAST":      "BEDOK",
+  "MACPHERSON":      "GEYLANG",
+  "LUCKY PLAZA":     "ORCHARD",
+  "ION ORCHARD":     "ORCHARD",
+  "TAKASHIMAYA":     "ORCHARD",
+  "MUSTAFA":         "ROCHOR",
+  "PLAZA SINGAPURA": "MUSEUM",
+  "BUGIS JUNCTION":  "ROCHOR",
+  "VIVOCITY":        "BUKIT MERAH",
+  "HARBOURFRONT CENTRE": "BUKIT MERAH",
+};
+
+function normalizeAreaText(text: string): string {
+  return text
+    .toUpperCase()
+    .replace(/[\u2010-\u2015–—/(),\.]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Longest-substring match: "Geylang Lorong 25" → "GEYLANG"
+// Also match shorter aliases inside compound names like "LITTLE INDIA / FARRER PARK".
 function matchPlanningAreaName(
   text: string,
   knownNames: string[],
 ): string | null {
-  const upper = text.toUpperCase();
+  const upper = normalizeAreaText(text);
   let best: string | null = null;
+  let bestLength = 0;
+
   for (const name of knownNames) {
-    if (upper.includes(name) && (!best || name.length > best.length))
+    const normalizedName = normalizeAreaText(name);
+    if (!normalizedName) continue;
+
+    if (upper.includes(normalizedName) && normalizedName.length > bestLength) {
       best = name;
+      bestLength = normalizedName.length;
+      continue;
+    }
+
+    const aliasParts = normalizedName
+      .split("/")
+      .flatMap((part) => part.split(","))
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    for (const alias of aliasParts) {
+      if (upper.includes(alias) && alias.length > bestLength) {
+        best = name;
+        bestLength = alias.length;
+      }
+    }
   }
+
+  // Neighbourhood alias pass — wins only if longer than any planning-area
+  // name matched above (e.g. "Little India" → ROCHOR).
+  for (const [neighbourhood, planningArea] of Object.entries(NEIGHBOURHOOD_ALIASES)) {
+    if (
+      knownNames.includes(planningArea) &&
+      upper.includes(neighbourhood) &&
+      neighbourhood.length > bestLength
+    ) {
+      best = planningArea;
+      bestLength = neighbourhood.length;
+    }
+  }
+
   return best;
 }
 

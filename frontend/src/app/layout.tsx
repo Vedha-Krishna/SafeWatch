@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "../index.css";
 
 export const metadata: Metadata = {
-  title: "PettyCrimeSingapore Dashboard",
+  title: "SafeWatch",
   description: "Frontend connected to FastAPI incident API",
 };
 

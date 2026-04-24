@@ -1,34 +1,55 @@
+import os
 import json
-from typing import TypedDict, Optional, List
-from langgraph.graph import StateGraph, START, END
-from IPython.display import Image, display
-from langchain_core.runnables.graph import CurveStyle, MermaidDrawMethod, NodeStyles
+from typing import List, Optional, TypedDict
 
 from dotenv import load_dotenv
-import os
-load_dotenv()
-
+from langgraph.graph import END, START, StateGraph
+from openai import OpenAI
 from sklearn.metrics.pairwise import cosine_similarity
 
 from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+
 from deterministic import CATEGORY_DEFINITIONS
 
 
+load_dotenv()
+
+_openai_client: OpenAI | None = None
+_category_embeddings: dict[str, list[list[float]]] | None = None
+
 ## Define and Embed Categories
-def get_embedding(text: str):
-    response = client.embeddings.create(
+def get_openai_client() -> OpenAI:
+    global _openai_client
+
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("Missing OPENAI_API_KEY in environment.")
+        _openai_client = OpenAI(api_key=api_key)
+
+    return _openai_client
+
+
+def get_embedding(text: str) -> list[float]:
+    response = get_openai_client().embeddings.create(
         model="text-embedding-3-small",
         input=text
     )
     return response.data[0].embedding
 
 
-CATEGORY_EMBEDDINGS = {
-    cat: [get_embedding(text) for text in prototypes]
-    for cat, prototypes in CATEGORY_DEFINITIONS.items()
-}
+def get_category_embeddings() -> dict[str, list[list[float]]]:
+    global _category_embeddings
+
+    if _category_embeddings is None:
+        _category_embeddings = {
+            cat: [get_embedding(text) for text in prototypes]
+            for cat, prototypes in CATEGORY_DEFINITIONS.items()
+        }
+
+    return _category_embeddings
 
 
 # =========================================================
@@ -148,7 +169,7 @@ def classifier_node(state: State) -> dict:
 
     candidate_scores = {}
 
-    for cat, prototype_embs in CATEGORY_EMBEDDINGS.items():
+    for cat, prototype_embs in get_category_embeddings().items():
         scores = [
             cosine_similarity([incident_embedding], [emb])[0][0]
             for emb in prototype_embs
@@ -287,7 +308,7 @@ def classifier_node(state: State) -> dict:
         }}
         """
 
-        response = client.chat.completions.create(
+        response = get_openai_client().chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}]
         )
@@ -384,7 +405,7 @@ def classifier_node(state: State) -> dict:
 
     # LLM extracts features based on the above
     # Call LLM for rubric extraction
-    response = client.chat.completions.create(
+    response = get_openai_client().chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}]
     )
@@ -567,7 +588,7 @@ def decision_node(state: State) -> dict:
     }}
     """
 
-    response = client.chat.completions.create(
+    response = get_openai_client().chat.completions.create(
         model="gpt-5-mini",
         messages=[{"role": "user", "content": prompt}]
     )
