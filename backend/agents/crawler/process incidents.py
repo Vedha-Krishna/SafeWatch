@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 # import pipeline function from orchestration
-from orchestration6_DB import run_pipeline_for_1_post
+from orchestration7 import run_pipeline_for_1_post
 
 
 load_dotenv()

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -15,8 +15,6 @@ import {
   SG_CENTER,
   SG_ZOOM,
   SEVERITY_COLOR,
-  SEVERITY_LABEL,
-  type Severity,
   type Incident,
 } from "./mockData";
 import { Crosshair, Map as MapIcon } from "lucide-react";
@@ -173,7 +171,6 @@ export default function MapView() {
             <AreaPin
               key={a.areaName}
               area={a}
-              open={openArea === a.areaName}
               onOpen={() => setOpenArea(a.areaName)}
               onClose={() => setOpenArea(null)}
               onHover={(h) => setHoveredArea(h ? a.areaName : null)}
@@ -307,6 +304,8 @@ function useAreaAggregates(incidents: Incident[]): {
     const unmatched: Incident[] = [];
 
     for (const inc of incidents) {
+      // Skip incidents with no real location — shown in sidebar instead
+      if (inc.location.area === "Singapore") continue;
       const name = matchPlanningAreaName(inc.location.area, knownNames);
       if (!name) {
         unmatched.push(inc);
@@ -341,14 +340,12 @@ function useAreaAggregates(incidents: Incident[]): {
 
 function AreaPin({
   area,
-  open,
   onOpen,
   onClose,
   onHover,
   onIncidentClick,
 }: {
   area: AreaAggregate;
-  open: boolean;
   onOpen: () => void;
   onClose: () => void;
   onHover: (hovering: boolean) => void;
@@ -516,6 +513,14 @@ function AreaPin({
 // Fallback pin (incidents that can't be mapped to a planning area)
 // ─────────────────────────────────────────────────────────────────────
 
+// Hex severity colour → CSS rgba string for the ring
+const SEVERITY_RING: Record<string, string> = {
+  "#ef4444": "rgba(239,68,68,0.5)",
+  "#f97316": "rgba(249,115,22,0.5)",
+  "#eab308": "rgba(234,179,8,0.5)",
+  "#22c55e": "rgba(34,197,94,0.5)",
+};
+
 function FallbackPin({
   incident,
   selected,
@@ -525,33 +530,26 @@ function FallbackPin({
   selected: boolean;
   onClick: () => void;
 }) {
-  const color = SEVERITY_COLOR[incident.severity];
-  const headSize = selected ? 20 : 16;
-  const totalH = 40;
-  const totalW = headSize + 6;
+  const fill  = SEVERITY_COLOR[incident.severity];
+  const ring  = SEVERITY_RING[fill] ?? "rgba(255,255,255,0.35)";
+  const size  = selected ? 26 : 20;
+  const ringSize = size + 12;
 
   const icon = useMemo(
     () =>
       divIcon({
-        className: "safewatch-pin-wrap",
+        className: "safewatch-area-pin-wrap",
         html: `
-          <div class="safewatch-pushpin ${selected ? "is-selected" : ""}"
-               style="--pin-color:${color};--head-size:${headSize}px;--pin-bounce:2s;">
-            <div class="safewatch-pushpin-shadow"></div>
-            <svg class="safewatch-pushpin-body" viewBox="0 0 ${totalW} ${totalH}" width="${totalW}" height="${totalH}">
-              <ellipse cx="${totalW / 2}" cy="${totalH - 1}" rx="${headSize / 2.2}" ry="1.4" fill="rgba(0,0,0,0.55)" />
-              <path d="M ${totalW / 2 - 0.8} ${headSize - 1} L ${totalW / 2 + 0.8} ${headSize - 1} L ${totalW / 2 + 0.4} ${totalH - 2} L ${totalW / 2 - 0.4} ${totalH - 2} Z"
-                    fill="#94a3b8"/>
-              <circle cx="${totalW / 2}" cy="${headSize / 2}" r="${headSize / 2}"
-                      fill="${color}"
-                      stroke="rgba(255,255,255,0.85)" stroke-width="1"/>
-            </svg>
+          <div class="safewatch-area-pin"
+               style="--pin-size:${size}px;--ring-size:${ringSize}px;--pin-fill:${fill};--pin-glow:${fill};--pin-ring:${ring};--pin-bounce:2s;">
+            <div class="safewatch-area-pin-ring"></div>
+            <div class="safewatch-area-pin-disc"></div>
           </div>
         `,
-        iconSize: [totalW, totalH],
-        iconAnchor: [totalW / 2, totalH - 1],
+        iconSize:   [ringSize, ringSize],
+        iconAnchor: [ringSize / 2, ringSize / 2],
       }),
-    [color, headSize, totalH, totalW, selected],
+    [fill, ring, size, ringSize],
   );
 
   return (
@@ -563,12 +561,12 @@ function FallbackPin({
     >
       <Tooltip
         direction="top"
-        offset={[0, -totalH - 2]}
+        offset={[0, -ringSize / 2]}
         opacity={1}
         className="safewatch-tooltip"
       >
         <div className="text-xs">
-          <div className="font-bold" style={{ color }}>
+          <div className="font-bold" style={{ color: fill }}>
             {incident.title}
           </div>
           <div className="text-slate-300">{incident.location.area}</div>

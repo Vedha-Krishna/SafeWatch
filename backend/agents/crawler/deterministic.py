@@ -130,6 +130,47 @@ LOCATION_HINTS = [
     "Yishun",
 ]
 
+SG_LOCATION_COORDS: dict[str, tuple[float, float]] = {
+    "Ang Mo Kio":    (1.3691, 103.8454),
+    "Bedok":         (1.3236, 103.9273),
+    "Bishan":        (1.3526, 103.8352),
+    "Boon Lay":      (1.3404, 103.7090),
+    "Bugis":         (1.3009, 103.8555),
+    "Bukit Batok":   (1.3490, 103.7495),
+    "Bukit Timah":   (1.3294, 103.8021),
+    "Changi":        (1.3644, 103.9915),
+    "Chinatown":     (1.2836, 103.8444),
+    "Choa Chu Kang": (1.3840, 103.7470),
+    "Clementi":      (1.3162, 103.7649),
+    "Dhoby Ghaut":   (1.2990, 103.8456),
+    "HarbourFront":  (1.2650, 103.8198),
+    "Hougang":       (1.3613, 103.8863),
+    "Jurong East":   (1.3331, 103.7420),
+    "Kallang":       (1.3119, 103.8631),
+    "Little India":  (1.3066, 103.8518),
+    "Orchard":       (1.3048, 103.8318),
+    "Pasir Ris":     (1.3730, 103.9494),
+    "Punggol":       (1.3984, 103.9072),
+    "Queenstown":    (1.2942, 103.8060),
+    "Sengkang":      (1.3868, 103.8914),
+    "Serangoon":     (1.3554, 103.8679),
+    "Tampines":      (1.3530, 103.9450),
+    "Tanjong Pagar": (1.2764, 103.8446),
+    "Toa Payoh":     (1.3343, 103.8563),
+    "Woodlands":     (1.4382, 103.7891),
+    "Yishun":        (1.4295, 103.8350),
+}
+
+
+def geocode_location(location_text: str | None) -> tuple[float | None, float | None]:
+    if not location_text:
+        return None, None
+    lowered = location_text.lower()
+    for name, (lat, lng) in SG_LOCATION_COORDS.items():
+        if name.lower() in lowered:
+            return lat, lng
+    return None, None
+
 TIME_PATTERNS = [
     r"\b(?:today|yesterday|tonight|this morning|this afternoon|this evening|last night)\b",
     r"\b(?:around|about|at)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)\b",
@@ -295,6 +336,8 @@ def process_post(
     if normalized_text and normalized_text not in seen_incidents:
         seen_incidents[normalized_text] = incident_id
 
+    latitude, longitude = geocode_location(location_text)
+
     return {
         "incident_id": incident_id,
         "post_id": post.get("post_id"),
@@ -307,8 +350,8 @@ def process_post(
         "severity": None,
         "authenticity_score": None,
         "location_text": location_text,
-        "latitude": None,
-        "longitude": None,
+        "latitude": latitude,
+        "longitude": longitude,
         "timestamp_text": timestamp_text,
         "normalized_time": post.get("timestamp"),
         "candidate_scores": category_scores,
