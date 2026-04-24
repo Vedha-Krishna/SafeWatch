@@ -568,7 +568,7 @@ def decision_node(state: State) -> dict:
     """
 
     response = client.chat.completions.create(
-        model="gpt-5-mini",
+        model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}]
     )
 

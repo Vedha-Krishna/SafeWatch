@@ -28,10 +28,14 @@ API ROUTE OVERVIEW:
     POST /api/db/incidents/{id}/feedback — Send agent feedback for an incident
 """
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------
 # Import the crawler functions (used by the original JSON-based endpoint).
@@ -41,6 +45,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # -----------------------------------------------------------------------
 try:
     from .agents.crawler.deterministic import load_posts, process_posts
+    from .agents.langchain.workflow import graph as pipeline_graph
     from .db import (
         is_supabase_configured,
         get_all_incidents,
@@ -53,6 +58,7 @@ try:
     )
 except ImportError:
     from agents.crawler.deterministic import load_posts, process_posts
+    from agents.langchain.workflow import graph as pipeline_graph
     from db import (
         is_supabase_configured,
         get_all_incidents,
@@ -429,6 +435,76 @@ def send_agent_feedback(incident_id: str, feedback_data: dict) -> dict[str, obje
 # -----------------------------------------------------------------------
 # ROUTE: GET /api/db/official-reports
 # -----------------------------------------------------------------------
+
+# -----------------------------------------------------------------------
+# ROUTE: POST /api/pipeline/run
+# -----------------------------------------------------------------------
+
+class _PipelinePost(BaseModel):
+    post_id: str
+    raw_text: str
+
+
+class _PipelineRunRequest(BaseModel):
+    posts: list[_PipelinePost]
+
+
+_DECISION_TO_STATUS = {
+    "publish": "published",
+    "reject": "rejected",
+    "needs_revision": "needs_revision",
+}
+
+
+@app.post("/api/pipeline/run")
+def run_pipeline(request: _PipelineRunRequest) -> dict[str, object]:
+    """
+    Run the LangGraph pipeline on one or more raw posts.
+
+    Each post is passed through the crawler → cleaner → classifier → decider
+    graph sequentially. The decider node writes the result to Supabase when
+    the database is configured.
+
+    Request body:
+        { "posts": [{ "post_id": "...", "raw_text": "..." }] }
+
+    Response:
+        { "results": [{ "post_id", "decision", "category",
+                         "authenticity_score", "status" }] }
+    """
+    results = []
+
+    for post in request.posts:
+        initial_state = {
+            "post_id": post.post_id,
+            "raw_text": post.raw_text,
+            "candidate": None,
+            "category": None,
+            "authenticity_score": None,
+            "decision": None,
+            "revision_count": 0,
+            "notes": [],
+        }
+
+        try:
+            final_state = pipeline_graph.invoke(initial_state)
+            decision = final_state.get("decision")
+            results.append({
+                "post_id": post.post_id,
+                "decision": decision,
+                "category": final_state.get("category"),
+                "authenticity_score": final_state.get("authenticity_score"),
+                "status": _DECISION_TO_STATUS.get(decision, decision),
+            })
+        except Exception as exc:
+            logger.error("Pipeline failed for post %s: %s", post.post_id, exc)
+            results.append({
+                "post_id": post.post_id,
+                "error": str(exc),
+            })
+
+    return {"results": results}
+
 
 @app.get("/api/db/official-reports")
 def list_official_reports(
