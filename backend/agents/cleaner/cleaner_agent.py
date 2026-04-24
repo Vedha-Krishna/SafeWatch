@@ -100,7 +100,7 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
         .eq("status", "queued")
         .is_("cleaned_content", "null")
         .is_("locked_by", "null")
-        .lte("available_at", now_iso)
+        # .lte("available_at", now_iso)
         .order("created_at", desc=False)
         .limit(25)
         .execute()

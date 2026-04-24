@@ -7,9 +7,9 @@ from supabase import create_client
 
 # import pipeline function from orchestration
 try:
-    from .orchestration9_novector import run_pipeline_for_1_post
+    from orchestration12 import run_pipeline_for_1_post
 except ImportError:
-    from orchestration9_novector import run_pipeline_for_1_post
+    from orchestration12 import run_pipeline_for_1_post
 
 
 load_dotenv()

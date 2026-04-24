@@ -13,7 +13,7 @@ import requests
 from dotenv import load_dotenv
 from transformers import pipeline
 
-DEFAULT_SUBREDDIT = "mockpostsforNBT"
+DEFAULT_SUBREDDIT = "singapore"
 DEFAULT_INCREMENTAL_LIMIT = 25
 DEFAULT_BACKFILL_LIMIT = 100
 DEFAULT_USER_AGENT = (
