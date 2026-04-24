@@ -71,8 +71,8 @@ npm run dev
 
 ### Scheduled Pipeline With Vercel Cron
 
-The project includes a Vercel cron route that can trigger the backend pipeline every
-10 minutes:
+The project includes a Vercel cron route that can trigger the backend pipeline once
+per day:
 
 - Vercel calls `frontend/src/app/api/cron/safewatch/route.ts`
 - The route validates `CRON_SECRET`
