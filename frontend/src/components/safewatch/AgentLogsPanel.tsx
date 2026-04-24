@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, ChevronDown, Search } from "lucide-react";
+import { X, ChevronDown, ExternalLink, Search } from "lucide-react";
 import { useStore, timeAgo } from "./store";
 import {
   DECISION_COLOR,
@@ -136,6 +136,12 @@ export default function AgentLogsPanel() {
                   const count = counts[filter.value] ?? 0;
                   const accent =
                     filter.value === "ALL" ? "#93c5fd" : DECISION_COLOR[filter.value];
+                  const inactiveText =
+                    filter.value === "ALL" ? "#cbd5e1" : `${accent}cc`;
+                  const inactiveBorder =
+                    filter.value === "ALL" ? "rgba(255,255,255,0.08)" : `${accent}40`;
+                  const inactiveBackground =
+                    filter.value === "ALL" ? "rgba(255,255,255,0.03)" : `${accent}14`;
 
                   return (
                     <button
@@ -151,16 +157,16 @@ export default function AgentLogsPanel() {
                               boxShadow: `0 0 0 1px ${accent}26, 0 6px 16px ${accent}1f`,
                             }
                           : {
-                              backgroundColor: "rgba(255,255,255,0.03)",
-                              color: "#cbd5e1",
-                              borderColor: "rgba(255,255,255,0.08)",
+                              backgroundColor: inactiveBackground,
+                              color: inactiveText,
+                              borderColor: inactiveBorder,
                             }
                       }
                     >
                       <span>{filter.label}</span>
                       <span
                         className="text-[10px] tabular-nums"
-                        style={{ color: active ? accent : "#94a3b8" }}
+                        style={{ color: active ? accent : inactiveText }}
                       >
                         {count}
                       </span>
@@ -212,6 +218,7 @@ function LogCard({
   onJumpToIncident: (id: string) => void;
 }) {
   const color = DECISION_COLOR[log.decision];
+  const sourceUrl = normalizeSourceUrl(log.source_url);
 
   return (
     <div
@@ -259,14 +266,28 @@ function LogCard({
               {log.incident_id}
             </span>
           )}
-          <span>{log.source}</span>
+          {sourceUrl ? (
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200 underline decoration-blue-400/40 underline-offset-2"
+              title={`Open source post on ${log.source}`}
+            >
+              {log.source}
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          ) : (
+            <span>{log.source}</span>
+          )}
           <span className="text-slate-500">|</span>
           <span>{timeAgo(log.scraped_at)}</span>
           <span className="text-slate-500">({formatDateTime(log.scraped_at)})</span>
         </div>
 
         <p className="text-sm text-slate-100 leading-relaxed line-clamp-3 mb-2.5">
-          {log.raw_text || "No raw report text."}
+          {log.cleaned_content || log.raw_text || "No report text."}
         </p>
 
         <div className="flex items-center justify-between text-[11px] text-slate-300">
@@ -288,19 +309,6 @@ function LogCard({
             style={{ borderTop: `1px solid ${color}22` }}
           >
             <div className="px-4 py-3.5 space-y-3">
-              {log.decision_reason && (
-                <div
-                  className="rounded-md p-2.5 text-xs leading-relaxed border"
-                  style={{
-                    backgroundColor: `${color}15`,
-                    borderColor: `${color}3d`,
-                    color: `${color}e6`,
-                  }}
-                >
-                  {log.decision_reason}
-                </div>
-              )}
-
               {log.messages.map((message, index) => (
                 <div
                   key={`${log.id}-message-${index}`}
@@ -387,13 +395,24 @@ function matchesSearch(log: AgentLog, searchTerm: string): boolean {
     log.id,
     log.incident_id ?? "",
     log.source,
+    log.source_url ?? "",
     log.decision,
+    log.cleaned_content ?? "",
     log.raw_text ?? "",
     log.decision_reason ?? "",
     ...log.messages.map((message) => `${message.agent} ${message.content}`),
   ];
 
   return haystacks.some((value) => value.toLowerCase().includes(query));
+}
+
+function normalizeSourceUrl(value?: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  return null;
 }
 
 function normalizeMessageLine(line: string): string {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -8,7 +8,7 @@ import {
   Polygon,
   useMap,
 } from "react-leaflet";
-import { LatLngBounds, divIcon } from "leaflet";
+import { LatLngBounds, Marker as LeafletMarker, divIcon } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useFilteredIncidents, useStore, timeAgo } from "./store";
 import {
@@ -318,10 +318,11 @@ function useAreaAggregates(incidents: Incident[]): {
     const unmatched: Incident[] = [];
 
     for (const inc of incidents) {
-      // Skip incidents with no real location — shown in sidebar instead
-      if (inc.location.area === "Singapore") continue;
+      // Skip incidents with no mappable Singapore location — shown in sidebar instead.
+      if (!inc.hasMapLocation) continue;
       const name = matchPlanningAreaName(inc.location.area, knownNames);
       if (!name) {
+        // Unknown SG sub-location: keep a precise fallback pin.
         unmatched.push(inc);
         continue;
       }
@@ -365,6 +366,7 @@ function AreaPin({
   onHover: (hovering: boolean) => void;
   onIncidentClick: (inc: Incident) => void;
 }) {
+  const markerRef = useRef<LeafletMarker | null>(null);
   const count = area.incidents.length;
   const heat = getHeat(count);
   // Pin grows a bit with count, capped
@@ -392,10 +394,14 @@ function AreaPin({
 
   return (
     <Marker
+      ref={markerRef}
       position={area.centroid}
       icon={icon}
       eventHandlers={{
-        click: onOpen,
+        click: () => {
+          markerRef.current?.closeTooltip();
+          onOpen();
+        },
         mouseover: () => onHover(true),
         mouseout: () => onHover(false),
       }}
@@ -493,7 +499,11 @@ function AreaPin({
             {area.incidents.map((inc) => (
               <button
                 key={inc.id}
-                onClick={() => onIncidentClick(inc)}
+                onClick={() => {
+                  markerRef.current?.closePopup();
+                  onClose();
+                  onIncidentClick(inc);
+                }}
                 className="w-full text-left flex items-start gap-2 px-2 py-1.5 rounded hover:bg-white/10 transition-colors"
               >
                 <span

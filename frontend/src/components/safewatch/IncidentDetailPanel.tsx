@@ -5,6 +5,7 @@ import {
   MapPin,
   Clock,
   Radio,
+  ExternalLink,
 } from "lucide-react";
 import { useStore, formatTimestamp, timeAgo } from "./store";
 import { SEVERITY_COLOR, SEVERITY_LABEL, SG_CENTER, SG_ZOOM } from "./mockData";
@@ -12,6 +13,7 @@ import { SEVERITY_COLOR, SEVERITY_LABEL, SG_CENTER, SG_ZOOM } from "./mockData";
 export default function IncidentDetailPanel() {
   const { selectedIncidentId, incidents, selectIncident, flyTo } = useStore();
   const incident = incidents.find((i) => i.id === selectedIncidentId);
+  const sourceUrl = incident ? normalizeSourceUrl(incident.source_url) : null;
 
   const handleClose = () => {
     selectIncident(null);
@@ -73,7 +75,20 @@ export default function IncidentDetailPanel() {
               </span>
               <span className="flex items-center gap-1.5">
                 <Radio className="w-3.5 h-3.5 text-slate-500" />
-                Source: {incident.source}
+                {sourceUrl ? (
+                  <a
+                    href={sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-200 transition-colors underline decoration-blue-400/40 underline-offset-2"
+                    title={`Open source post on ${incident.source}`}
+                  >
+                    Source: {incident.source}
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : (
+                  <span>Source: {incident.source}</span>
+                )}
               </span>
             </div>
 
@@ -97,6 +112,15 @@ export default function IncidentDetailPanel() {
       )}
     </AnimatePresence>
   );
+}
+
+function normalizeSourceUrl(value?: string | null): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (/^www\./i.test(trimmed)) return `https://${trimmed}`;
+  return null;
 }
 
 function Section({

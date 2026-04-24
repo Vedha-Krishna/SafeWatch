@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { supabase } from "../../lib/supabase";
 import {
+  SG_CENTER,
   type Incident,
   type Cluster,
   type Severity,
@@ -9,7 +10,7 @@ import {
   type AgentMessage,
 } from "./mockData";
 
-// ── Singapore location → coordinates lookup ──────────────────────────────────
+// ── Singapore location → area-center coordinates lookup ──────────────────────
 const SG_COORDS: Record<string, [number, number]> = {
   "ang mo kio":    [1.3691, 103.8454],
   "bedok":         [1.3236, 103.9273],
@@ -41,13 +42,22 @@ const SG_COORDS: Record<string, [number, number]> = {
   "yishun":        [1.4295, 103.8350],
 };
 
-function geocode(locationText: string | null): [number, number] {
-  if (!locationText) return [1.3521, 103.8198];
+export function getAreaCenter(locationText: string | null): [number, number] | null {
+  if (!locationText) return null;
   const lower = locationText.toLowerCase();
   for (const [name, coords] of Object.entries(SG_COORDS)) {
     if (lower.includes(name)) return coords;
   }
-  return [1.3521, 103.8198];
+  return null;
+}
+
+function isValidNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isSingaporeCoordinate(lat: number, lng: number): boolean {
+  // Tight-enough bounding box for Singapore and nearby islands.
+  return lat >= 1.16 && lat <= 1.48 && lng >= 103.6 && lng <= 104.1;
 }
 
 // ── Category mapping ──────────────────────────────────────────────────────────
@@ -89,6 +99,7 @@ function mapSeverity(score: number | null): Severity {
 interface DbRow {
   incident_id:        string;
   source_platform:    string | null;
+  source_url?:        string | null;
   raw_text:           string | null;
   cleaned_content:    string | null;
   status:             string | null;
@@ -113,10 +124,19 @@ function validIsoTimestamp(value: string | null | undefined): string | null {
 }
 
 function rowToIncident(r: DbRow): Incident {
-  // Use DB coordinates if available, fall back to lookup, then SG center
-  const [fallbackLat, fallbackLng] = geocode(r.location_text);
-  const lat = r.latitude ?? fallbackLat;
-  const lng = r.longitude ?? fallbackLng;
+  // Keep pins only for confidently Singapore locations.
+  const dbCoords =
+    isValidNumber(r.latitude) &&
+    isValidNumber(r.longitude) &&
+    isSingaporeCoordinate(r.latitude, r.longitude)
+      ? ([r.latitude, r.longitude] as [number, number])
+      : null;
+  const inferredCoords = getAreaCenter(r.location_text);
+  const hasMapLocation = dbCoords !== null || inferredCoords !== null;
+  // Prefer text-matched Singapore coordinates so click-to-fly aligns with
+  // the displayed location name (DB coordinates can be stale or generic).
+  const [lat, lng] = inferredCoords ?? dbCoords ?? SG_CENTER;
+  const area = hasMapLocation ? r.location_text ?? "Singapore" : "No location";
   const confidence = r.authenticity_score ?? 0.5;
   const description = r.cleaned_content || r.raw_text || "";
   const categoryLabel = r.category
@@ -131,8 +151,10 @@ function rowToIncident(r: DbRow): Incident {
     severity: mapSeverity(r.severity),
     title: categoryLabel,
     description,
-    location: { area: r.location_text ?? "Singapore", lat, lng },
+    location: { area, lat, lng },
+    hasMapLocation,
     source: r.source_platform ?? "unknown",
+    source_url: r.source_url ?? null,
     verified: r.cleaned_content !== null,
     confidence,
     timestamp: postCreatedAt ?? "",
@@ -147,6 +169,46 @@ function mapDecisionToAgentDecision(decision?: string | null): AgentLog["decisio
   return "REJECTED";
 }
 
+const OVERSEAS_DECISION_REASON =
+  "This report describes an incident outside Singapore and does not create a direct public-safety risk in Singapore. Overseas incidents are rejected for the Singapore petty-crime pipeline despite the authenticity score.";
+
+function normalizeDecisionReason(params: {
+  decision: AgentLog["decision"];
+  decisionReason: string | null;
+  rawText: string | null;
+}): string | null {
+  const { decision, decisionReason, rawText } = params;
+  const reason = decisionReason?.trim() || null;
+  if (decision !== "REJECTED") return reason;
+
+  const haystack = `${rawText ?? ""} ${reason ?? ""}`.toLowerCase();
+  const mentionsOverseas =
+    haystack.includes("overseas") ||
+    haystack.includes("outside singapore") ||
+    haystack.includes("out of singapore") ||
+    haystack.includes("not in singapore") ||
+    haystack.includes("foreign country") ||
+    haystack.includes("direct public-safety risk in singapore");
+
+  if (mentionsOverseas) {
+    return OVERSEAS_DECISION_REASON;
+  }
+
+  if (!reason) {
+    return "This report was rejected because it does not meet the publication criteria for a Singapore petty-crime or public-safety incident.";
+  }
+
+  if (reason.toLowerCase().includes("retry limit reached")) {
+    return "This report was rejected after repeated retries because the system could not obtain enough reliable incident detail to publish it.";
+  }
+
+  if (reason.toLowerCase().includes("llm output invalid")) {
+    return "This report was rejected as a safety fallback because the decision model output was invalid or incomplete.";
+  }
+
+  return reason;
+}
+
 function extractAgentContent(m: Record<string, unknown>): string {
   const lines: string[] = [];
 
@@ -156,6 +218,11 @@ function extractAgentContent(m: Record<string, unknown>): string {
     : typeof m.content === "string" ? m.content
     : null;
   if (primary) lines.push(primary);
+
+  // Decision explanation (shown inside decision message block)
+  if (typeof m.decision_reason === "string" && m.decision_reason) {
+    lines.push(m.decision_reason);
+  }
 
   // Incident summary used for vector embedding
   if (typeof m.incident_summary_used === "string" && m.incident_summary_used)
@@ -221,24 +288,47 @@ function rowToAgentLog(r: DbRow): AgentLog {
   const rawDecision = raw.find(
     (m) => m.agent === "decision" && typeof m.decision_reason === "string",
   );
-  const decision_reason = rawDecision
+  const parsedDecisionReason = rawDecision
     ? (rawDecision.decision_reason as string)
     : null;
+  const decision = mapDecisionToAgentDecision(r.decision);
+  const decision_reason = normalizeDecisionReason({
+    decision,
+    decisionReason: parsedDecisionReason,
+    rawText: r.raw_text,
+  });
 
-  const messages: AgentMessage[] = raw.map((m) => ({
-    agent: typeof m.agent === "string" ? m.agent
-         : typeof m.role  === "string" ? m.role
-         : "unknown",
-    content: extractAgentContent(m),
-  }));
+  const messages: AgentMessage[] = raw.map((m) => {
+    const agent = typeof m.agent === "string" ? m.agent
+      : typeof m.role === "string" ? m.role
+      : "unknown";
+
+    let content = extractAgentContent(m);
+    if (agent === "crawler" && r.raw_text) {
+      content = content
+        ? `${content}\nraw text: ${r.raw_text}`
+        : `raw text: ${r.raw_text}`;
+    }
+
+    return { agent, content };
+  });
+
+  if (r.raw_text && !messages.some((m) => m.agent === "crawler")) {
+    messages.unshift({
+      agent: "crawler",
+      content: `raw text: ${r.raw_text}`,
+    });
+  }
 
   return {
     id: r.incident_id,
     incident_id: r.incident_id,
+    cleaned_content: r.cleaned_content,
     raw_text: r.raw_text,
     scraped_at: r.created_at ?? new Date().toISOString(),
     source: r.source_platform ?? "unknown",
-    decision: mapDecisionToAgentDecision(r.decision),
+    source_url: r.source_url ?? null,
+    decision,
     decision_reason,
     messages,
   };
@@ -299,7 +389,9 @@ export const useStore = create<SafeWatchState>((set) => ({
   loadIncidents: async () => {
     const { data, error } = await supabase
       .from("incidents")
-      .select("incident_id, source_platform, raw_text, cleaned_content, status, category, authenticity_score, severity, location_text, latitude, longitude, timestamp_text, normalized_time, created_at")
+      .select("incident_id, source_platform, source_url, raw_text, cleaned_content, status, category, authenticity_score, severity, location_text, latitude, longitude, timestamp_text, normalized_time, created_at")
+      .eq("status", "processed")
+      .eq("decision", "publish")
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -316,7 +408,7 @@ export const useStore = create<SafeWatchState>((set) => ({
   loadAgentLogs: async () => {
     const { data, error } = await supabase
       .from("incidents")
-      .select("incident_id, source_platform, raw_text, decision, agent_messages, created_at")
+      .select("incident_id, source_platform, source_url, cleaned_content, raw_text, decision, agent_messages, created_at")
       .not("agent_messages", "is", null)
       .order("created_at", { ascending: false })
       .limit(200);
