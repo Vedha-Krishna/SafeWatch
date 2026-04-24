@@ -30,10 +30,19 @@ DEFAULT_MAX_RETRIES = 5
 DEFAULT_REQUEST_DELAY = 0.35
 DEFAULT_BACKOFF_BASE_SECONDS = 1.5
 
-classifier = pipeline(
-    "zero-shot-classification",
-    model="facebook/bart-large-mnli",
-)
+_classifier: Any | None = None
+
+
+def get_classifier() -> Any:
+    global _classifier
+
+    if _classifier is None:
+        _classifier = pipeline(
+            "zero-shot-classification",
+            model="facebook/bart-large-mnli",
+        )
+
+    return _classifier
 
 
 def get_supabase_client():
@@ -144,7 +153,7 @@ def classify_relevance(content: str) -> tuple[str, float]:
     if not content:
         return "", 0.0
 
-    result = classifier(
+    result = get_classifier()(
         truncate_for_classification(content),
         candidate_labels=[RELEVANT_LABEL, OTHER_LABEL],
         multi_label=False,

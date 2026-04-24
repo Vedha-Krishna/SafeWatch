@@ -3,7 +3,11 @@ langchain
 langchain-core
 langchain-huggingface
 huggingface-hub
+openai
 python-dotenv
+requests
+scikit-learn
 fastapi
+transformers
 uvicorn[standard]
 supabase
