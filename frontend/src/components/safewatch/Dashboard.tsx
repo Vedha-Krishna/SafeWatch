@@ -15,7 +15,7 @@ export default function Dashboard() {
   }, [loadIncidents, loadAgentLogs]);
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#0a0e17] text-slate-100 overflow-hidden">
+    <div className="h-dvh min-h-dvh w-screen flex flex-col bg-[#0a0e17] text-slate-100 overflow-hidden">
       <Header />
       <div className="relative flex-1 min-h-0">
         <div className="absolute inset-0">
@@ -32,13 +32,17 @@ function SidebarContainer() {
   const collapsed = useStore((s) => s.sidebarCollapsed);
   return (
     <div
-      className={`absolute z-[1050] flex pointer-events-none right-3 sm:right-4
+      className={`absolute z-[1050] flex pointer-events-none
         ${collapsed
-          ? "bottom-12 sm:bottom-auto sm:top-20 w-auto"
-          : "left-3 sm:left-auto top-[8.5rem] sm:top-20 w-auto sm:w-[300px] max-w-[calc(100%-1.5rem)] sm:max-w-[calc(100%-2rem)] bottom-3 sm:bottom-16"
+          ? "right-2 bottom-[calc(1rem+env(safe-area-inset-bottom))] sm:right-4 sm:bottom-auto sm:top-20 w-auto"
+          : "left-0 right-0 bottom-0 top-auto max-h-[46dvh] sm:left-auto sm:right-4 sm:top-20 sm:bottom-16 sm:w-[300px] sm:max-w-[calc(100%-2rem)]"
         }`}
     >
-      <div className="safewatch-glass-panel w-full pointer-events-auto rounded-2xl overflow-hidden flex flex-col">
+      <div
+        className={`safewatch-glass-panel w-full pointer-events-auto overflow-hidden flex flex-col max-h-full ${
+          collapsed ? "rounded-full sm:rounded-2xl" : "rounded-t-2xl sm:rounded-2xl"
+        }`}
+      >
         <SeveritySidebar />
       </div>
     </div>

@@ -77,7 +77,7 @@ export default function SeveritySidebar() {
       {/* Header */}
       <button
         onClick={toggleSidebar}
-        className="px-4 py-3 flex items-center justify-between w-full hover:bg-white/[0.03] transition-colors"
+        className="px-4 py-3.5 sm:py-3 flex items-center justify-between w-full hover:bg-white/[0.03] transition-colors"
       >
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
@@ -98,7 +98,7 @@ export default function SeveritySidebar() {
       {!collapsed && (
         <>
           {/* Filter chips */}
-          <div className="flex gap-1 px-4 pb-3 flex-wrap">
+          <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto sm:flex-wrap safewatch-scroll">
             {(
               [
                 ["all",           "All",      mappedLocationCount],
@@ -108,7 +108,7 @@ export default function SeveritySidebar() {
               <button
                 key={v}
                 onClick={() => setSeverityFilter(v)}
-                className={`text-[10px] font-mono uppercase px-2.5 py-1 rounded-full transition-colors ${
+                className={`h-8 text-[10px] font-mono uppercase px-3 rounded-full transition-colors whitespace-nowrap ${
                   severityFilter === v
                     ? "bg-white/12 text-blue-100 border border-blue-300/25"
                     : "bg-transparent text-slate-300 hover:text-blue-200"
@@ -128,7 +128,7 @@ export default function SeveritySidebar() {
             {/* No Location chip — amber accent */}
             <button
               onClick={() => setSeverityFilter("no_location")}
-              className={`flex items-center gap-1 text-[10px] font-mono uppercase px-2.5 py-1 rounded-full transition-colors ${
+              className={`h-8 flex items-center gap-1 text-[10px] font-mono uppercase px-3 rounded-full transition-colors whitespace-nowrap ${
                 severityFilter === "no_location"
                   ? "text-amber-300 bg-amber-500/20 border border-amber-500/40"
                   : "text-slate-300 hover:text-amber-300 bg-transparent"
@@ -161,7 +161,7 @@ export default function SeveritySidebar() {
           )}
 
           {/* Cards list */}
-          <div className="flex-1 overflow-y-auto safewatch-scroll px-3 pb-3 space-y-1.5">
+          <div className="flex-1 overflow-y-auto safewatch-scroll px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3 space-y-1.5">
             <AnimatePresence mode="popLayout">
               {visibleIncidents.map((inc) => (
                 <IncidentCard
@@ -214,7 +214,7 @@ function IncidentCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 8 }}
       onClick={onClick}
-      className="w-full text-left rounded-lg p-2.5 hover:bg-white/[0.04] transition-colors block group flex items-start gap-2.5"
+      className="w-full text-left rounded-lg p-3 sm:p-2.5 hover:bg-white/[0.04] active:bg-white/[0.07] transition-colors block group flex items-start gap-2.5"
     >
       <span
         className="w-2 h-2 rounded-full mt-1.5 shrink-0"
@@ -224,7 +224,7 @@ function IncidentCard({
         }}
       />
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-white group-hover:text-blue-300 transition-colors truncate">
+        <div className="text-sm font-medium text-white group-hover:text-blue-300 transition-colors line-clamp-2 sm:truncate">
           {incident.title}
         </div>
         <div className="flex items-center gap-1 text-[11px] font-mono truncate">

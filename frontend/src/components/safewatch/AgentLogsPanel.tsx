@@ -79,7 +79,7 @@ export default function AgentLogsPanel() {
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 240 }}
-            className="fixed top-0 left-0 bottom-0 z-[1200] w-full sm:w-[470px] flex flex-col overflow-hidden"
+            className="fixed top-0 left-0 bottom-0 z-[1200] w-full max-w-full sm:w-[470px] flex flex-col overflow-hidden"
             style={{
               background: "rgba(8, 11, 18, 0.78)",
               backdropFilter: "blur(40px) saturate(150%)",
@@ -98,7 +98,7 @@ export default function AgentLogsPanel() {
               }}
             />
 
-            <div className="relative px-5 py-4 border-b border-white/[0.08] shrink-0 bg-[#0b1220]/80 backdrop-blur-xl">
+            <div className="relative px-4 sm:px-5 py-4 border-b border-white/[0.08] shrink-0 bg-[#0b1220]/80 backdrop-blur-xl">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-base font-semibold text-white tracking-tight">
@@ -110,7 +110,7 @@ export default function AgentLogsPanel() {
                 </div>
                 <button
                   onClick={() => setOpen(false)}
-                  className="p-1.5 rounded-md text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
+                  className="p-2 rounded-md text-slate-300 hover:text-white hover:bg-white/[0.08] transition-colors"
                   aria-label="Close"
                 >
                   <X className="w-4 h-4" />
@@ -118,15 +118,15 @@ export default function AgentLogsPanel() {
               </div>
             </div>
 
-            <div className="relative px-5 py-3 border-b border-white/[0.08] shrink-0 bg-[#0b1220]/70 backdrop-blur-xl space-y-2.5">
+            <div className="relative px-4 sm:px-5 py-3 border-b border-white/[0.08] shrink-0 bg-[#0b1220]/70 backdrop-blur-xl space-y-2.5">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
                 <input
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search id, source, reason, or message text"
-                  className="w-full h-8 pl-8 pr-2 text-xs text-slate-100 placeholder:text-slate-400 bg-white/[0.04] border border-white/[0.08] rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400/50 focus:border-blue-300/40"
+                  className="w-full h-10 sm:h-8 pl-9 sm:pl-8 pr-2 text-xs text-slate-100 placeholder:text-slate-400 bg-white/[0.04] border border-white/[0.08] rounded-md focus:outline-none focus:ring-1 focus:ring-blue-400/50 focus:border-blue-300/40"
                 />
               </div>
 
@@ -147,7 +147,7 @@ export default function AgentLogsPanel() {
                     <button
                       key={filter.value}
                       onClick={() => setDecisionFilter(filter.value)}
-                      className="text-xs px-3 py-1 rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 border"
+                      className="h-8 sm:h-auto text-xs px-3 sm:py-1 rounded-full whitespace-nowrap transition-all flex items-center gap-1.5 border"
                       style={
                         active
                           ? {
