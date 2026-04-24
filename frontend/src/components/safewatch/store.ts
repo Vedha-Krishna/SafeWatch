@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { supabase } from "../../lib/supabase";
 import {
   mockIncidents,
   mockClusters,
@@ -7,12 +8,122 @@ import {
   type Severity,
 } from "./mockData";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// The URL of the FastAPI backend.
-// If you change the port in main.py, update this too.
-// ─────────────────────────────────────────────────────────────────────────────
-const API_URL = "http://localhost:8000";
+// ── Singapore location → coordinates lookup ───────────────────────────────────
+const SG_COORDS: Record<string, [number, number]> = {
+  "ang mo kio":    [1.3691, 103.8454],
+  "bedok":         [1.3236, 103.9273],
+  "bishan":        [1.3526, 103.8352],
+  "boon lay":      [1.3404, 103.7090],
+  "bugis":         [1.3009, 103.8555],
+  "bukit batok":   [1.3490, 103.7495],
+  "bukit timah":   [1.3294, 103.8021],
+  "changi":        [1.3644, 103.9915],
+  "chinatown":     [1.2836, 103.8444],
+  "choa chu kang": [1.3840, 103.7470],
+  "clementi":      [1.3162, 103.7649],
+  "dhoby ghaut":   [1.2990, 103.8456],
+  "harbourfront":  [1.2650, 103.8198],
+  "hougang":       [1.3613, 103.8863],
+  "jurong east":   [1.3331, 103.7420],
+  "kallang":       [1.3119, 103.8631],
+  "little india":  [1.3066, 103.8518],
+  "orchard":       [1.3048, 103.8318],
+  "pasir ris":     [1.3730, 103.9494],
+  "punggol":       [1.3984, 103.9072],
+  "queenstown":    [1.2942, 103.8060],
+  "sengkang":      [1.3868, 103.8914],
+  "serangoon":     [1.3554, 103.8679],
+  "tampines":      [1.3530, 103.9450],
+  "tanjong pagar": [1.2764, 103.8446],
+  "toa payoh":     [1.3343, 103.8563],
+  "woodlands":     [1.4382, 103.7891],
+  "yishun":        [1.4295, 103.8350],
+};
 
+function geocode(locationText: string | null): [number, number] {
+  if (!locationText) return [1.3521, 103.8198];
+  const lower = locationText.toLowerCase();
+  for (const [name, coords] of Object.entries(SG_COORDS)) {
+    if (lower.includes(name)) return coords;
+  }
+  return [1.3521, 103.8198];
+}
+
+// ── Category mapping ──────────────────────────────────────────────────────────
+function mapCategory(cat: string | null): string {
+  switch (cat) {
+    case "theft":
+    case "attempted_theft":   return "theft";
+    case "vandalism":         return "vandalism";
+    case "robbery":           return "snatch_theft";
+    case "scam_fraud":        return "scam";
+    case "harassment_threat":
+    case "assault":
+    case "sexual_offense":
+    case "harassment":        return "harassment";
+    default:                  return "theft";
+  }
+}
+
+// ── Numeric severity → enum ───────────────────────────────────────────────────
+function mapSeverity(score: number | null): Severity {
+  if (score === null) return "medium";
+  if (score >= 0.7)   return "critical";
+  if (score >= 0.5)   return "high";
+  if (score >= 0.3)   return "medium";
+  return "low";
+}
+
+// ── DB row → Incident ─────────────────────────────────────────────────────────
+interface DbRow {
+  incident_id:        string;
+  source_platform:    string | null;
+  raw_text:           string | null;
+  cleaned_content:    string | null;
+  status:             string | null;
+  category:           string | null;
+  authenticity_score: number | null;
+  severity:           number | null;
+  location_text:      string | null;
+  latitude:           number | null;
+  longitude:          number | null;
+  normalized_time:    string | null;
+  created_at:         string | null;
+}
+
+function rowToIncident(r: DbRow): Incident {
+  const [fallbackLat, fallbackLng] = geocode(r.location_text);
+  const lat = r.latitude ?? fallbackLat;
+  const lng = r.longitude ?? fallbackLng;
+  const confidence = r.authenticity_score ?? 0.5;
+  const description = r.cleaned_content || r.raw_text || "";
+  const categoryLabel = r.category
+    ? r.category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : "Incident";
+
+  return {
+    id:       r.incident_id,
+    type:     mapCategory(r.category),
+    severity: mapSeverity(r.severity),
+    title:    categoryLabel,
+    description,
+    location: { area: r.location_text ?? "Singapore", lat, lng },
+    source:   r.source_platform ?? "unknown",
+    verified: r.cleaned_content !== null,
+    confidence,
+    timestamp:  r.normalized_time ?? r.created_at ?? new Date().toISOString(),
+    cluster_id: null,
+    agent_analysis: {
+      classification:            r.category ?? "Unknown",
+      classification_confidence: confidence,
+      validation:                r.status ?? "unknown",
+      severity_reason:           "Processed by cleaner agent",
+      pattern:                   "Isolated incident — no cluster detected",
+    },
+  };
+}
+
+// ── Zustand store ─────────────────────────────────────────────────────────────
 export type CrimeTypeFilter =
   | "all"
   | "snatch_theft"
@@ -24,7 +135,7 @@ export type CrimeTypeFilter =
   | "loan_shark";
 
 export type TimeRangeFilter = "24h" | "7d" | "30d" | "90d";
-export type SeverityFilter = "all" | "critical_only" | "clusters_only";
+export type SeverityFilter = "all" | "critical_only" | "no_location";
 
 interface SafeWatchState {
   incidents: Incident[];
@@ -36,8 +147,6 @@ interface SafeWatchState {
   severityFilter: SeverityFilter;
   mapFlyTo: { lat: number; lng: number; zoom: number; key: number } | null;
   sidebarCollapsed: boolean;
-
-  // Whether the API fetch is currently in progress
   isLoading: boolean;
 
   toggleSidebar: () => void;
@@ -47,85 +156,12 @@ interface SafeWatchState {
   setTimeRange: (v: TimeRangeFilter) => void;
   setSeverityFilter: (v: SeverityFilter) => void;
   flyTo: (lat: number, lng: number, zoom?: number) => void;
-
-  // Fetches published incidents from the FastAPI + Supabase backend.
-  // Falls back to mock data if the API is unreachable or returns nothing.
-  fetchIncidents: () => Promise<void>;
+  loadIncidents: () => Promise<void>;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// HELPER: Convert a database incident row into the Incident shape
-// that the frontend map and sidebar expect.
-//
-// The database stores severity as a float (0.0 to 1.0).
-// The frontend uses a string label: "critical" | "high" | "medium" | "low".
-// This function translates between the two formats.
-// ─────────────────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapDbIncidentToFrontend(row: Record<string, any>): Incident {
-  // --- Severity: float → label ---
-  const severityFloat = Number(row.severity ?? 0.5);
-  const severity: Severity =
-    severityFloat >= 0.9 ? "critical" :
-    severityFloat >= 0.7 ? "high" :
-    severityFloat >= 0.5 ? "medium" : "low";
-
-  // --- Category: use as the incident type ---
-  const category = String(row.category ?? "suspicious_activity");
-
-  // --- Human-readable title from category ---
-  const titleMap: Record<string, string> = {
-    theft:               "Theft",
-    attempted_theft:     "Attempted Theft",
-    vandalism:           "Vandalism",
-    suspicious_activity: "Suspicious Activity",
-    harassment:          "Harassment",
-  };
-  const title = titleMap[category] ?? "Incident";
-
-  // --- Authenticity score becomes confidence ---
-  const confidence = Number(row.authenticity_score ?? 0.5);
-
-  return {
-    id:          String(row.incident_id),
-    type:        category,
-    severity,
-    title,
-    description: String(row.raw_text ?? "No description available."),
-    location: {
-      area: String(row.location_text ?? "Singapore"),
-      lat:  Number(row.latitude  ?? 1.3521),
-      lng:  Number(row.longitude ?? 103.8198),
-    },
-    source:     String(row.source_platform ?? "community"),
-    verified:   confidence >= 0.8,
-    confidence,
-    timestamp:  String(row.normalized_time ?? new Date().toISOString()),
-    cluster_id: null,
-
-    // Build a basic agent_analysis summary from the stored scores
-    agent_analysis: {
-      classification:            title,
-      classification_confidence: confidence,
-      validation: confidence >= 0.8
-        ? "Verified — meets authenticity threshold"
-        : "Unverified — below confidence threshold",
-      severity_reason:
-        severity === "critical" ? "High individual impact, possible repeat pattern" :
-        severity === "high"     ? "Significant impact or recurring pattern" :
-        severity === "medium"   ? "Moderate impact, isolated incident" :
-                                  "Low impact, isolated incident",
-      pattern: "Processed by PettyCrimeSG agent pipeline",
-    },
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ZUSTAND STORE
-// ─────────────────────────────────────────────────────────────────────────────
 export const useStore = create<SafeWatchState>((set) => ({
   // Start with mock data so the map is never blank on first load.
-  // fetchIncidents() will replace this with real database data.
+  // loadIncidents() will replace this with real Supabase data.
   incidents: mockIncidents,
   clusters:  mockClusters,
 
@@ -141,63 +177,46 @@ export const useStore = create<SafeWatchState>((set) => ({
     typeof window !== "undefined" && window.innerWidth < 640,
 
   toggleSidebar:    () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-  selectIncident:   (id)  => set({ selectedIncidentId: id }),
-  selectCluster:    (id)  => set({ selectedClusterId: id }),
-  setCrimeType:     (v)   => set({ crimeType: v }),
-  setTimeRange:     (v)   => set({ timeRange: v }),
-  setSeverityFilter:(v)   => set({ severityFilter: v }),
+  selectIncident:   (id) => set({ selectedIncidentId: id }),
+  selectCluster:    (id) => set({ selectedClusterId: id }),
+  setCrimeType:     (v)  => set({ crimeType: v }),
+  setTimeRange:     (v)  => set({ timeRange: v }),
+  setSeverityFilter:(v)  => set({ severityFilter: v }),
   flyTo: (lat, lng, zoom = 15) =>
     set({ mapFlyTo: { lat, lng, zoom, key: Date.now() } }),
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // fetchIncidents
-  //
-  // Calls the backend API to get all published incidents from Supabase.
-  // If the API is down or returns no data, keeps the mock data so the
-  // map is never empty during development.
-  // ─────────────────────────────────────────────────────────────────────────
-  fetchIncidents: async () => {
+  loadIncidents: async () => {
     set({ isLoading: true });
 
-    try {
-      const response = await fetch(
-        `${API_URL}/api/db/incidents?published_only=true&limit=200`
-      );
+    const { data, error } = await supabase
+      .from("incidents")
+      .select(
+        "incident_id, source_platform, raw_text, cleaned_content, status, " +
+        "category, authenticity_score, severity, location_text, latitude, " +
+        "longitude, normalized_time, created_at"
+      )
+      .order("created_at", { ascending: false })
+      .limit(200);
 
-      if (!response.ok) {
-        throw new Error(`Backend returned status ${response.status}`);
-      }
+    if (error) {
+      console.error("Failed to load incidents from Supabase:", error.message);
+      set({ incidents: mockIncidents, isLoading: false });
+      return;
+    }
 
-      const data = await response.json();
+    const incidents = (data as DbRow[]).map(rowToIncident);
 
-      // data.incidents is the array of raw database rows
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const dbIncidents = data.incidents as Record<string, any>[];
-
-      if (dbIncidents.length > 0) {
-        // We have real data — convert each row and replace mock data
-        const mapped = dbIncidents.map(mapDbIncidentToFrontend);
-        set({ incidents: mapped, isLoading: false });
-        console.log(`Loaded ${mapped.length} incidents from database.`);
-      } else {
-        // Database is empty — keep mock data so the map still shows something
-        console.warn("Database has no published incidents yet. Showing mock data.");
-        set({ incidents: mockIncidents, isLoading: false });
-      }
-
-    } catch (error) {
-      // API is unreachable (backend not started, wrong port, etc.)
-      // Fall back to mock data silently so the UI still works
-      console.warn("Could not reach backend API. Showing mock data.", error);
+    if (incidents.length > 0) {
+      console.log(`Loaded ${incidents.length} incidents from Supabase.`);
+      set({ incidents, isLoading: false });
+    } else {
+      console.warn("No incidents in Supabase yet. Showing mock data.");
       set({ incidents: mockIncidents, isLoading: false });
     }
   },
 }));
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SELECTOR HOOKS — used by components to read filtered state
-// ─────────────────────────────────────────────────────────────────────────────
-
+// ── Derived selectors ─────────────────────────────────────────────────────────
 const TIME_RANGE_HOURS: Record<TimeRangeFilter, number> = {
   "24h": 24,
   "7d":  24 * 7,
@@ -207,8 +226,7 @@ const TIME_RANGE_HOURS: Record<TimeRangeFilter, number> = {
 
 export function useFilteredIncidents(): Incident[] {
   const { incidents, crimeType, timeRange } = useStore();
-  const now = Date.now();
-  const cutoff = now - TIME_RANGE_HOURS[timeRange] * 3600 * 1000;
+  const cutoff = Date.now() - TIME_RANGE_HOURS[timeRange] * 3600 * 1000;
 
   return incidents.filter((i) => {
     if (crimeType !== "all" && i.type !== crimeType) return false;

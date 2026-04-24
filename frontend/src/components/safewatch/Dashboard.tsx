@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import Header from "./Header";
 import MapView from "./MapView";
 import IncidentDetailPanel from "./IncidentDetailPanel";
@@ -6,13 +6,11 @@ import SeveritySidebar from "./SeveritySidebar";
 import { useStore } from "./store";
 
 export default function Dashboard() {
-  const fetchIncidents = useStore((s) => s.fetchIncidents);
+  const loadIncidents = useStore((s) => s.loadIncidents);
 
-  // When the dashboard first loads, fetch real incidents from the database.
-  // If the backend is down, the store automatically falls back to mock data.
   useEffect(() => {
-    fetchIncidents();
-  }, [fetchIncidents]);
+    loadIncidents();
+  }, [loadIncidents]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0a0e17] text-slate-100 overflow-hidden">

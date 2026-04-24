@@ -812,3 +812,31 @@ if __name__ == "__main__":
 
     if total > 0:
         print(f"Acceptance Rate: {round((accepted / total) * 100, 1)}%")
+
+def print_agent_conversation(result: dict):
+    print("\nAgent Conversation:\n")
+
+    for msg in result.get("messages", []):
+        agent = msg.get("agent", "unknown")
+
+        if "llm_reasoning" in msg:
+            print(f"  {agent.capitalize()} (LLM):")
+            print(f"   {msg['llm_reasoning']}\n")
+
+        elif "reasoning" in msg:
+            print(f"  {agent.capitalize()} (system):")
+            print(f"   {msg['reasoning']}\n")
+
+        elif "instruction" in msg:
+            print(f"  {agent.capitalize()}:")
+            print(f"   {msg['instruction']}\n")
+
+        elif "decision_reason" in msg:
+            print(f"  {agent.capitalize()} decision reason:")
+            print(f"   {msg['decision_reason']}\n")
+
+        elif "note" in msg:
+            print(f"  {agent.capitalize()}:")
+            print(f"   {msg['note']}\n")
+
+    print("-" * 40)

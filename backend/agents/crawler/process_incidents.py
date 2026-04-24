@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 # import pipeline function from orchestration
-from orchestration7 import run_pipeline_for_1_post
+from orchestration7 import run_pipeline_for_1_post, print_agent_conversation
 
 
 load_dotenv()
@@ -72,6 +72,7 @@ def process_queued_incidents() -> None:
         try:
             post = db_row_to_pipeline_input(row)
             result = run_pipeline_for_1_post(post)
+            print_agent_conversation(result)
             update_incident_after_pipeline(supabase, row["id"], result)
 
             print(
