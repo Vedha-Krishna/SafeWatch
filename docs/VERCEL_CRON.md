@@ -18,7 +18,7 @@ Vercel Cron
 | File | Purpose |
 |---|---|
 | `frontend/vercel.json` | Registers the cron schedule with Vercel. |
-| `frontend/src/app/api/cron/safewatch/route.ts` | Vercel Function called every 10 minutes. |
+| `frontend/src/app/api/cron/safewatch/route.ts` | Vercel Function called once per day. |
 | `backend/cron_pipeline.py` | Runs the backend cron pipeline in order. |
 | `backend/main.py` | Exposes `GET /api/cron/safewatch` for the backend. |
 
@@ -31,13 +31,13 @@ The schedule is in `frontend/vercel.json`:
   "crons": [
     {
       "path": "/api/cron/safewatch",
-      "schedule": "*/10 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
 ```
 
-`*/10 * * * *` means every 10 minutes. Vercel cron schedules use UTC.
+`0 0 * * *` means once per day at 00:00 UTC. Vercel cron schedules use UTC.
 
 ## Vercel Project Settings
 
@@ -117,5 +117,5 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 
 - Vercel creates cron jobs only for production deployments.
 - Vercel cron paths are HTTP GET requests, so the endpoint must return a normal response and must not redirect.
-- A 10-minute schedule requires a Vercel plan that supports more than daily cron execution.
+- Daily cron execution is supported on Vercel plans that include Cron Jobs.
 - If the full crawler/LLM pipeline takes too long for your host, keep the batch sizes low or move the heavy work into a queue/worker.
