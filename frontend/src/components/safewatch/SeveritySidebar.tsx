@@ -57,6 +57,14 @@ export default function SeveritySidebar() {
     () => sorted.filter((i) => i.location.area === "Singapore").length,
     [sorted],
   );
+  const mappedLocationCount = useMemo(
+    () => sorted.filter((i) => i.location.area !== "Singapore").length,
+    [sorted],
+  );
+  const criticalCount = useMemo(
+    () => sorted.filter((i) => i.severity === "critical").length,
+    [sorted],
+  );
 
   return (
     <aside className="w-full h-full flex flex-col">
@@ -66,18 +74,18 @@ export default function SeveritySidebar() {
         className="px-4 py-3 flex items-center justify-between w-full hover:bg-white/[0.03] transition-colors"
       >
         <div className="flex items-center gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-300" />
           <span className="text-xs font-bold text-white font-mono uppercase tracking-wider">
             Incidents
           </span>
-          <span className="text-[10px] font-mono text-slate-500 tabular-nums">
+          <span className="text-[10px] font-mono text-slate-300 tabular-nums">
             {sorted.length}
           </span>
         </div>
         {collapsed ? (
-          <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+          <ChevronDown className="w-3.5 h-3.5 text-slate-300" />
         ) : (
-          <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
+          <ChevronUp className="w-3.5 h-3.5 text-slate-300" />
         )}
       </button>
 
@@ -87,20 +95,27 @@ export default function SeveritySidebar() {
           <div className="flex gap-1 px-4 pb-3 flex-wrap">
             {(
               [
-                ["all",           "All"],
-                ["critical_only", "Critical"],
+                ["all",           "All",      mappedLocationCount],
+                ["critical_only", "Critical", criticalCount],
               ] as const
-            ).map(([v, label]) => (
+            ).map(([v, label, count]) => (
               <button
                 key={v}
                 onClick={() => setSeverityFilter(v)}
                 className={`text-[10px] font-mono uppercase px-2.5 py-1 rounded-full transition-colors ${
                   severityFilter === v
-                    ? "bg-white/10 text-white"
-                    : "bg-transparent text-slate-500 hover:text-slate-300"
+                    ? "bg-white/12 text-blue-100 border border-blue-300/25"
+                    : "bg-transparent text-slate-300 hover:text-blue-200"
                 }`}
               >
                 {label}
+                <span
+                  className={`ml-1 tabular-nums ${
+                    severityFilter === v ? "text-blue-200" : "text-slate-400"
+                  }`}
+                >
+                  {count}
+                </span>
               </button>
             ))}
 
@@ -110,7 +125,7 @@ export default function SeveritySidebar() {
               className={`flex items-center gap-1 text-[10px] font-mono uppercase px-2.5 py-1 rounded-full transition-colors ${
                 severityFilter === "no_location"
                   ? "text-amber-300 bg-amber-500/20 border border-amber-500/40"
-                  : "text-slate-500 hover:text-amber-400 bg-transparent"
+                  : "text-slate-300 hover:text-amber-300 bg-transparent"
               }`}
             >
               <MapPinOff className="w-3 h-3" />
@@ -120,7 +135,7 @@ export default function SeveritySidebar() {
                   className={`ml-0.5 tabular-nums ${
                     severityFilter === "no_location"
                       ? "text-amber-400"
-                      : "text-slate-600"
+                      : "text-slate-400"
                   }`}
                 >
                   {noLocationCount}
@@ -157,8 +172,10 @@ export default function SeveritySidebar() {
               ))}
             </AnimatePresence>
             {visibleIncidents.length === 0 && (
-              <div className="text-center text-xs text-slate-500 py-8 font-mono">
-                No incidents match.
+              <div className="text-center text-xs text-slate-300 py-8 font-mono">
+                {severityFilter === "critical_only"
+                  ? "No critical incidents in the current filters."
+                  : "No incidents match."}
               </div>
             )}
           </div>
@@ -177,7 +194,8 @@ function IncidentCard({
   noLocation: boolean;
   onClick: () => void;
 }) {
-  const color = noLocation ? NO_LOCATION_COLOR : SEVERITY_COLOR[incident.severity];
+  const markerColor = noLocation ? NO_LOCATION_COLOR : SEVERITY_COLOR[incident.severity];
+  const severityColor = SEVERITY_COLOR[incident.severity];
   return (
     <motion.button
       layout
@@ -189,7 +207,10 @@ function IncidentCard({
     >
       <span
         className="w-2 h-2 rounded-full mt-1.5 shrink-0"
-        style={{ backgroundColor: color, boxShadow: `0 0 8px ${color}` }}
+        style={{
+          backgroundColor: markerColor,
+          boxShadow: `0 0 8px ${markerColor}`,
+        }}
       />
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-white group-hover:text-blue-300 transition-colors truncate">
@@ -208,8 +229,8 @@ function IncidentCard({
         <div className="text-[10px] text-slate-400 font-mono flex items-center gap-1 mt-0.5">
           <Clock className="w-2.5 h-2.5" />
           {timeAgo(incident.timestamp)}
-          <span className="ml-auto font-bold" style={{ color }}>
-            {noLocation ? "Unknown" : SEVERITY_LABEL[incident.severity]}
+          <span className="ml-auto font-bold" style={{ color: severityColor }}>
+            {SEVERITY_LABEL[incident.severity]}
           </span>
         </div>
       </div>

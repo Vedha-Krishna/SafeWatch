@@ -51,14 +51,19 @@ def db_row_to_pipeline_input(row: dict) -> dict:
 
 
 def update_incident_after_pipeline(supabase: Any, row_id: int, result: dict) -> None:
+    location_text = result.get("location_text") or result.get("location")
+    action_text = result.get("action_text") or result.get("action")
+    normalized_time = result.get("normalized_time") or result.get("timestamp_text")
+
     update_payload = {
         "category": result["category"],
         "category_score": result.get("category_score"),
         "authenticity_score": result["authenticity_score"],
         "severity": result["severity"],
-        "location_text": result.get("location_text"),
-        "timestamp_text": result.get("normalized_time"),
-        "action_text": result.get("action_text"),
+        "location_text": location_text,
+        "timestamp_text": normalized_time,
+        "normalized_time": normalized_time,
+        "action_text": action_text,
         "decision": result["decision"],
         "agent_messages": json.dumps(result["messages"], ensure_ascii=False),
         "status": "processed",
