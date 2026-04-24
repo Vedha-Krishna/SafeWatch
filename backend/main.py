@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
     # Running as package: python -m uvicorn backend.main:app
     from .agents.crawler.deterministic import load_posts, process_posts
+    from .cron_pipeline import run_safewatch_pipeline
 except ImportError:
     # Running from backend/: python -m uvicorn main:app
     from agents.crawler.deterministic import load_posts, process_posts
+    from cron_pipeline import run_safewatch_pipeline
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT_PATH = PROJECT_ROOT / "data" / "sample_posts.json"
@@ -47,6 +50,15 @@ def read_incident_drafts(input_path: Path = DEFAULT_INPUT_PATH) -> list[dict]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+def verify_cron_authorization(authorization: str | None) -> None:
+    cron_secret = os.getenv("CRON_SECRET")
+    if not cron_secret:
+        raise HTTPException(status_code=500, detail="CRON_SECRET is not configured.")
+
+    if authorization != f"Bearer {cron_secret}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -68,6 +80,18 @@ def list_incidents(
         "count": len(incidents),
         "incidents": incidents,
     }
+
+
+@app.get("/api/cron/safewatch")
+def run_safewatch_cron(
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    verify_cron_authorization(authorization)
+
+    try:
+        return run_safewatch_pipeline()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Cron pipeline failed: {exc}") from exc
 
 
 @app.get("/")
