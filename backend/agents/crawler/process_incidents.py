@@ -47,7 +47,6 @@ def update_incident_after_pipeline(supabase: Any, row_id: int, result: dict) -> 
         "authenticity_score": result["authenticity_score"],
         "severity": result["severity"],
         "location_text": result["location"],
-        "timestamp_text": result["time"],
         "action_text": result["action"],
         "decision": result["decision"],
         "agent_messages": json.dumps(result["messages"], ensure_ascii=False),
