@@ -7,10 +7,13 @@ import { useStore } from "./store";
 
 export default function Dashboard() {
   const loadIncidents = useStore((s) => s.loadIncidents);
+  const subscribeRealtime = useStore((s) => s.subscribeRealtime);
 
   useEffect(() => {
     loadIncidents();
-  }, [loadIncidents]);
+    const unsubscribe = subscribeRealtime();
+    return unsubscribe;
+  }, [loadIncidents, subscribeRealtime]);
 
   return (
     <div className="h-screen w-screen flex flex-col bg-[#0a0e17] text-slate-100 overflow-hidden">

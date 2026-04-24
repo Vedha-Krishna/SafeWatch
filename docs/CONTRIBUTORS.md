@@ -46,7 +46,7 @@
 
 - [x] Category keyword scoring
 - [x] LLM authenticity prompt written
-- [ ] 🚨 **Fix scoring formula** (max 0.65 but threshold is 0.70 — nothing publishes!)
+- [x] Fix scoring formula (vandalism → 0.72, harassment → 0.71, all known categories now clear the 0.70 threshold)
 - [ ] Add `source_reliability` & corroboration scores
 - [ ] Set `temperature=0` on LLM calls
 - [x] Vector similarity scoring
@@ -89,8 +89,8 @@
 - [x] Incident detail panel
 - [x] Time range + crime type filters
 - [x] Sidebar list
-- [ ] 🚨 **Re-add `fetchIncidents` to `store.ts`** (reverted by teammate — showing mock data!)
-- [ ] Live updates via Supabase Realtime
+- [x] Re-add `fetchIncidents` to `store.ts` — resolved: `loadIncidents` fetches from Supabase and is called on Dashboard mount; falls back to mock data only when DB is empty
+- [x] Live updates via Supabase Realtime
 
 ---
 

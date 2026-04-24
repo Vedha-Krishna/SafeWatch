@@ -157,6 +157,7 @@ interface SafeWatchState {
   setSeverityFilter: (v: SeverityFilter) => void;
   flyTo: (lat: number, lng: number, zoom?: number) => void;
   loadIncidents: () => Promise<void>;
+  subscribeRealtime: () => () => void;
 }
 
 export const useStore = create<SafeWatchState>((set) => ({
@@ -184,6 +185,22 @@ export const useStore = create<SafeWatchState>((set) => ({
   setSeverityFilter:(v)  => set({ severityFilter: v }),
   flyTo: (lat, lng, zoom = 15) =>
     set({ mapFlyTo: { lat, lng, zoom, key: Date.now() } }),
+
+  subscribeRealtime: () => {
+    const channel = supabase
+      .channel("incidents-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "incidents" },
+        (payload) => {
+          const newIncident = rowToIncident(payload.new as DbRow);
+          set((s) => ({ incidents: [newIncident, ...s.incidents] }));
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  },
 
   loadIncidents: async () => {
     set({ isLoading: true });
