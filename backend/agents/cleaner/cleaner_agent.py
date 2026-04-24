@@ -20,6 +20,15 @@ class CleanedIncident(BaseModel):
             "with slang, emotion, and usernames removed."
         ),
     )
+
+    action_text: Optional[str] = Field(
+        default=None,
+        description=(
+            "Short factual action/event phrase for dashboard display, "
+            "e.g. 'wallet stolen', 'phone snatched', 'suspected scam', 'shop break-in'."
+        ),
+    )
+
     topic_bucket: Literal["singapore_news", "singapore_viral", "other"]
     location_text: Optional[str] = Field(
         default=None,
@@ -51,9 +60,7 @@ def get_supabase_client():
     load_dotenv()
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = (
-        os.getenv("SUPABASE_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_ANON_KEY")
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     )
 
     if not supabase_url or not supabase_key:
@@ -153,6 +160,7 @@ def clean_with_llm(openai_client: Any, raw_text: str) -> CleanedIncident:
         f"Current Singapore time (SGT, UTC+8): {current_sgt}\n"
         "Rules:\n"
         "- Output exactly 1-2 sentences in cleaned_content.\n"
+        "- Output action_text as a short factual event phrase, e.g. 'wallet stolen', 'suspected scam', 'shop break-in'.\n"
         "- Remove slang, emotion, exaggeration, and usernames/handles.\n"
         "- Keep factual details only (what happened, where, when, who/what affected if available).\n"
         "- Select topic_bucket as one of: singapore_news, singapore_viral, other.\n"
@@ -201,6 +209,7 @@ def update_and_handoff(
     )
     update_payload = {
         "cleaned_content": cleaned_incident.cleaned_content,
+        "action_text": cleaned_incident.action_text,
         "topic_bucket": cleaned_incident.topic_bucket,
         "location_text": cleaned_incident.location_text,
         "latitude": cleaned_incident.latitude,
@@ -263,4 +272,9 @@ def run_once() -> bool:
 
 
 if __name__ == "__main__":
-    run_once()
+    processed = 0
+
+    while run_once():
+        processed += 1
+
+    print(f"Cleaner finished. Processed {processed} incident(s).")

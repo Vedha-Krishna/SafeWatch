@@ -1,18 +1,17 @@
-import React from "react";
-import { Shield } from "lucide-react";
+import React, { useMemo } from "react";
+import { ChevronDown, Shield } from "lucide-react";
 import { useFilteredIncidents, useStore, severityCounts } from "./store";
 import type { CrimeTypeFilter, TimeRangeFilter } from "./store";
 
-const CRIME_OPTIONS: { value: CrimeTypeFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "snatch_theft", label: "Snatch theft" },
-  { value: "bike_theft", label: "Bike theft" },
-  { value: "scam", label: "Scams" },
-  { value: "vandalism", label: "Vandalism" },
-  { value: "harassment", label: "Harassment" },
-  { value: "theft", label: "Theft" },
-  { value: "loan_shark", label: "Loan shark" },
-];
+const CRIME_LABELS: Record<string, string> = {
+  snatch_theft: "Snatch theft",
+  bike_theft:   "Bike theft",
+  scam:         "Scams",
+  vandalism:    "Vandalism",
+  harassment:   "Harassment",
+  theft:        "Theft",
+  loan_shark:   "Loan shark",
+};
 
 const TIME_OPTIONS: { value: TimeRangeFilter; label: string }[] = [
   { value: "24h", label: "24h" },
@@ -24,8 +23,29 @@ const TIME_OPTIONS: { value: TimeRangeFilter; label: string }[] = [
 export default function Header() {
   const filtered = useFilteredIncidents();
   const counts = severityCounts(filtered);
-  const { crimeType, timeRange, setCrimeType, setTimeRange } = useStore();
-  const total = filtered.length;
+  const { incidents, crimeType, timeRange, setCrimeType, setTimeRange } = useStore();
+  const shownTotal = filtered.length;
+  const loadedTotal = incidents.length;
+  const isNarrowed = shownTotal !== loadedTotal;
+  const crimeOptions = useMemo(() => {
+    const types = new Set(
+      incidents
+        .map((incident) => incident.type)
+        .filter((type): type is string => Boolean(type)),
+    );
+
+    if (crimeType !== "all") types.add(crimeType);
+
+    return [
+      { value: "all" as CrimeTypeFilter, label: "All crimes" },
+      ...Array.from(types)
+        .sort((a, b) => crimeLabel(a).localeCompare(crimeLabel(b)))
+        .map((type) => ({
+          value: type as CrimeTypeFilter,
+          label: crimeLabel(type),
+        })),
+    ];
+  }, [incidents, crimeType]);
 
   return (
     <header className="absolute top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-[1100] flex flex-wrap items-center gap-2 sm:gap-3 pointer-events-none">
@@ -47,16 +67,21 @@ export default function Header() {
       {/* Counts pill */}
       <div className="safewatch-glass-panel rounded-full px-3 sm:px-4 flex items-center gap-2 sm:gap-3 pointer-events-auto h-9 shrink-0">
         <span className="hidden sm:inline text-[10px] font-mono uppercase text-slate-500">
-          Active
+          Showing
         </span>
-        <span className="text-sm font-bold text-white tabular-nums">
-          {total}
+        <span className="flex items-baseline gap-1 text-white tabular-nums">
+          <span className="text-sm font-bold">{shownTotal}</span>
+          {isNarrowed && (
+            <span className="hidden sm:inline text-[10px] font-mono text-slate-500">
+              / {loadedTotal}
+            </span>
+          )}
         </span>
         <span className="w-px h-4 bg-white/10" />
-        <Dot color="#ef4444" count={counts.critical} />
-        <Dot color="#f97316" count={counts.high} />
-        <Dot color="#eab308" count={counts.medium} />
-        <Dot color="#22c55e" count={counts.low} />
+        <Dot color="#ef4444" count={counts.critical} label="Critical" />
+        <Dot color="#f97316" count={counts.high} label="High" />
+        <Dot color="#eab308" count={counts.medium} label="Medium" />
+        <Dot color="#22c55e" count={counts.low} label="Low" />
       </div>
 
       {/* Filters pushed to right on wide, wrap to next line on narrow */}
@@ -65,7 +90,7 @@ export default function Header() {
           <Select
             value={crimeType}
             onChange={(v) => setCrimeType(v as CrimeTypeFilter)}
-            options={CRIME_OPTIONS}
+            options={crimeOptions}
           />
         </div>
         <span className="w-px h-4 bg-white/10 shrink-0" />
@@ -89,9 +114,29 @@ export default function Header() {
   );
 }
 
-function Dot({ color, count }: { color: string; count: number }) {
+function crimeLabel(type: string): string {
+  return CRIME_LABELS[type] ?? titleCase(type);
+}
+
+function titleCase(value: string): string {
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function Dot({
+  color,
+  count,
+  label,
+}: {
+  color: string;
+  count: number;
+  label: string;
+}) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" title={`${label}: ${count}`}>
       <span
         className="w-1.5 h-1.5 rounded-full"
         style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }}
@@ -116,16 +161,19 @@ function Select<T extends string>({
   options: { value: T; label: string }[];
 }) {
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value as T)}
-      className="bg-transparent border-0 px-1.5 sm:px-2.5 py-0.5 sm:py-1 text-[10px] sm:text-[11px] text-slate-200 font-mono hover:text-white focus:outline-none cursor-pointer max-w-[80px] sm:max-w-none truncate"
-    >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value} className="bg-[#0a0e17]">
-          {opt.label}
-        </option>
-      ))}
-    </select>
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as T)}
+        className="appearance-none bg-transparent border-0 pl-1.5 pr-5 sm:pl-2.5 sm:pr-6 py-0.5 sm:py-1 text-[10px] sm:text-[11px] text-slate-100 font-mono uppercase tracking-wide hover:text-white focus:outline-none cursor-pointer max-w-[110px] sm:max-w-none truncate"
+      >
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value} className="bg-[#0a0e17]">
+            {opt.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-300" />
+    </div>
   );
 }

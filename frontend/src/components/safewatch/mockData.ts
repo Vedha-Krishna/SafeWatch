@@ -1,13 +1,29 @@
 export type Severity = "critical" | "high" | "medium" | "low";
 export type Trend = "escalating" | "stable" | "declining";
 
-export interface AgentAnalysis {
-  classification: string;
-  classification_confidence: number;
-  validation: string;
-  severity_reason: string;
-  pattern: string;
+export type AgentDecision = "ACCEPTED" | "REJECTED";
+
+export interface AgentMessage {
+  agent: string;
+  content: string;
 }
+
+export interface AgentLog {
+  id: string;
+  incident_id?: string | null;
+  raw_text?: string | null;
+  scraped_at: string;
+  source: string;
+  decision: AgentDecision;
+  decision_reason?: string | null;
+  messages: AgentMessage[];
+}
+
+export const DECISION_COLOR: Record<AgentDecision, string> = {
+  ACCEPTED: "#22c55e",
+  REJECTED: "#f97316",
+};
+
 
 export interface Incident {
   id: string;
@@ -21,7 +37,6 @@ export interface Incident {
   confidence: number;
   timestamp: string;
   cluster_id: string | null;
-  agent_analysis: AgentAnalysis;
 }
 
 export interface Cluster {
@@ -63,21 +78,6 @@ function ai(
     id, type, severity, title, description,
     location: { area, lat, lng },
     source, verified, confidence, timestamp, cluster_id,
-    agent_analysis: {
-      classification: title,
-      classification_confidence: confidence,
-      validation: verified
-        ? "Verified — corroborated by source"
-        : "Unverified — single source",
-      severity_reason:
-        severity === "critical" ? "High individual impact, repeat pattern likely"
-      : severity === "high"     ? "Significant impact or part of recurring pattern"
-      : severity === "medium"   ? "Moderate impact, isolated incident"
-      :                           "Low impact, isolated incident",
-      pattern: cluster_id
-        ? `Part of cluster ${cluster_id}`
-        : "Isolated incident — no cluster detected",
-    },
   };
 }
 

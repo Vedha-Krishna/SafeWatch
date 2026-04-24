@@ -5,12 +5,8 @@ import {
   MapPin,
   Clock,
   Radio,
-  ShieldCheck,
-  AlertTriangle,
-  Network,
-  Sparkles,
 } from "lucide-react";
-import { useStore, timeAgo } from "./store";
+import { useStore, formatTimestamp, timeAgo } from "./store";
 import { SEVERITY_COLOR, SEVERITY_LABEL, SG_CENTER, SG_ZOOM } from "./mockData";
 
 export default function IncidentDetailPanel() {
@@ -73,11 +69,7 @@ export default function IncidentDetailPanel() {
               </span>
               <span className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-slate-500" />
-                {timeAgo(incident.timestamp)} —{" "}
-                {new Date(incident.timestamp).toLocaleString("en-SG", {
-                  dateStyle: "medium",
-                  timeStyle: "short",
-                })}
+                Posted {timeAgo(incident.timestamp)} - {formatTimestamp(incident.timestamp)}
               </span>
               <span className="flex items-center gap-1.5">
                 <Radio className="w-3.5 h-3.5 text-slate-500" />
@@ -91,54 +83,6 @@ export default function IncidentDetailPanel() {
               </p>
             </Section>
 
-            <Section title="Agent Analysis" icon={<Sparkles className="w-3 h-3" />}>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <AnalysisRow
-                  label="Classification"
-                  value={
-                    <>
-                      {incident.agent_analysis.classification}{" "}
-                      <span className="text-slate-500 font-mono">
-                        ({Math.round(
-                          incident.agent_analysis.classification_confidence * 100,
-                        )}
-                        %)
-                      </span>
-                    </>
-                  }
-                />
-                <AnalysisRow
-                  label="Validation"
-                  value={
-                    <span
-                      className={
-                        incident.verified ? "text-emerald-400" : "text-amber-400"
-                      }
-                    >
-                      {incident.verified ? (
-                        <ShieldCheck className="inline w-3 h-3 mr-1" />
-                      ) : (
-                        <AlertTriangle className="inline w-3 h-3 mr-1" />
-                      )}
-                      {incident.agent_analysis.validation}
-                    </span>
-                  }
-                />
-                <AnalysisRow
-                  label="Severity"
-                  value={incident.agent_analysis.severity_reason}
-                />
-                <AnalysisRow
-                  label="Pattern"
-                  value={
-                    <span className="flex items-start gap-1">
-                      <Network className="inline w-3 h-3 mt-0.5 text-slate-500" />
-                      {incident.agent_analysis.pattern}
-                    </span>
-                  }
-                />
-              </div>
-            </Section>
 
             <RelatedIncidents
               currentId={incident.id}
@@ -175,22 +119,6 @@ function Section({
   );
 }
 
-function AnalysisRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] font-mono uppercase text-slate-500">
-        {label}
-      </span>
-      <span className="text-slate-200">{value}</span>
-    </div>
-  );
-}
 
 function RelatedIncidents({
   currentId,

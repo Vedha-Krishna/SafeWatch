@@ -18,6 +18,7 @@ import {
   type Incident,
 } from "./mockData";
 import { Crosshair, Map as MapIcon } from "lucide-react";
+import AgentLogsPanel from "./AgentLogsPanel";
 
 // Singapore bounding box — locks panning to this region
 const SG_BOUNDS = new LatLngBounds([1.16, 103.6], [1.48, 104.1]);
@@ -108,6 +109,8 @@ function FlyController() {
 export default function MapView() {
   const incidents = useFilteredIncidents();
   const { selectedIncidentId, selectIncident, flyTo } = useStore();
+  const logsOpen    = useStore((s) => s.agentLogsOpen);
+  const setLogsOpen = useStore((s) => s.setAgentLogsOpen);
   const [styleId, setStyleId] = useState<MapStyleId>("voyager");
   const [styleMenuOpen, setStyleMenuOpen] = useState(false);
   const [hoveredArea, setHoveredArea] = useState<string | null>(null);
@@ -235,6 +238,17 @@ export default function MapView() {
             </div>
           )}
         </div>
+
+        <button
+          onClick={() => setLogsOpen(!logsOpen)}
+          className={`safewatch-control-btn ${logsOpen ? "is-active" : ""}`}
+          title="Show agent logs"
+          aria-label="Show agent logs"
+        >
+          <span className="font-mono text-sm leading-none">&gt;_</span>
+        </button>
+
+        <AgentLogsPanel />
       </div>
 
       {/* Heatmap legend — count-based */}
@@ -611,17 +625,94 @@ function loadPlanningAreas(): Promise<Map<string, PlanningGeom>> {
   return planningAreaPromise;
 }
 
+const NEIGHBOURHOOD_ALIASES: Record<string, string> = {
+  "LITTLE INDIA":    "ROCHOR",
+  "TEKKA":           "ROCHOR",
+  "KAMPONG GLAM":    "ROCHOR",
+  "ARAB STREET":     "ROCHOR",
+  "BUGIS":           "ROCHOR",
+  "BRAS BASAH":      "MUSEUM",
+  "DHOBY GHAUT":     "MUSEUM",
+  "CHINATOWN":       "OUTRAM",
+  "TANJONG PAGAR":   "OUTRAM",
+  "TIONG BAHRU":     "OUTRAM",
+  "TELOK BLANGAH":   "BUKIT MERAH",
+  "HARBOURFRONT":    "BUKIT MERAH",
+  "MARINA BAY":      "DOWNTOWN CORE",
+  "RAFFLES PLACE":   "DOWNTOWN CORE",
+  "SHENTON WAY":     "DOWNTOWN CORE",
+  "CLARKE QUAY":     "SINGAPORE RIVER",
+  "ROBERTSON QUAY":  "SINGAPORE RIVER",
+  "BOAT QUAY":       "SINGAPORE RIVER",
+  "HOLLAND VILLAGE": "QUEENSTOWN",
+  "KATONG":          "MARINE PARADE",
+  "EAST COAST":      "BEDOK",
+  "MACPHERSON":      "GEYLANG",
+  "LUCKY PLAZA":     "ORCHARD",
+  "ION ORCHARD":     "ORCHARD",
+  "TAKASHIMAYA":     "ORCHARD",
+  "MUSTAFA":         "ROCHOR",
+  "PLAZA SINGAPURA": "MUSEUM",
+  "BUGIS JUNCTION":  "ROCHOR",
+  "VIVOCITY":        "BUKIT MERAH",
+  "HARBOURFRONT CENTRE": "BUKIT MERAH",
+};
+
+function normalizeAreaText(text: string): string {
+  return text
+    .toUpperCase()
+    .replace(/[\u2010-\u2015–—/(),\.]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // Longest-substring match: "Geylang Lorong 25" → "GEYLANG"
+// Also match shorter aliases inside compound names like "LITTLE INDIA / FARRER PARK".
 function matchPlanningAreaName(
   text: string,
   knownNames: string[],
 ): string | null {
-  const upper = text.toUpperCase();
+  const upper = normalizeAreaText(text);
   let best: string | null = null;
+  let bestLength = 0;
+
   for (const name of knownNames) {
-    if (upper.includes(name) && (!best || name.length > best.length))
+    const normalizedName = normalizeAreaText(name);
+    if (!normalizedName) continue;
+
+    if (upper.includes(normalizedName) && normalizedName.length > bestLength) {
       best = name;
+      bestLength = normalizedName.length;
+      continue;
+    }
+
+    const aliasParts = normalizedName
+      .split("/")
+      .flatMap((part) => part.split(","))
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    for (const alias of aliasParts) {
+      if (upper.includes(alias) && alias.length > bestLength) {
+        best = name;
+        bestLength = alias.length;
+      }
+    }
   }
+
+  // Neighbourhood alias pass — wins only if longer than any planning-area
+  // name matched above (e.g. "Little India" → ROCHOR).
+  for (const [neighbourhood, planningArea] of Object.entries(NEIGHBOURHOOD_ALIASES)) {
+    if (
+      knownNames.includes(planningArea) &&
+      upper.includes(neighbourhood) &&
+      neighbourhood.length > bestLength
+    ) {
+      best = planningArea;
+      bestLength = neighbourhood.length;
+    }
+  }
+
   return best;
 }
 
