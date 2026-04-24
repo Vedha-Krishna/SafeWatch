@@ -14,6 +14,8 @@ from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
+from deterministic import CATEGORY_DEFINITIONS
+
 ## Define and Embed Categories
 def get_embedding(text: str):
     response = client.embeddings.create(
@@ -22,65 +24,6 @@ def get_embedding(text: str):
     )
     return response.data[0].embedding
 
-
-CATEGORY_DEFINITIONS = {
-    "theft": [
-        "A person stole someone else's belongings without consent.",
-        "Unattended property was taken without force.",
-        "Items were stolen from a victim, shop, or public place.",
-        "Property was dishonestly taken without unlawful entry or physical violence."
-    ],
-    "burglary": [
-        "A suspect broke into a house, shop, or office to steal or commit an offense.",
-        "There was forced entry into a premises.",
-        "Someone unlawfully entered a building and stole property.",
-        "A break-in or house intrusion occurred."
-    ],
-    "robbery": [
-        "Property was taken directly from a person using force, intimidation, or threat.",
-        "A victim was threatened or attacked and had belongings taken.",
-        "A mugging or forceful snatch theft occurred."
-    ],
-    "assault": [
-        "A person physically attacked another person.",
-        "The victim was punched, kicked, slapped, or hit.",
-        "There was bodily violence against a person.",
-        "Someone was beaten or attacked during a dispute."
-    ],
-    "vandalism": [
-        "Property was intentionally damaged or defaced.",
-        "Someone spray-painted, smashed, or damaged public or private property.",
-        "A vehicle, wall, or building was vandalized.",
-        "Intentional property damage occurred."
-    ],
-    "scam_fraud": [
-        "A person was deceived to obtain money, data, or benefit.",
-        "A scam, phishing attempt, or fraudulent transaction occurred.",
-        "Someone impersonated another person or entity for dishonest gain.",
-        "The victim was cheated through deception rather than physical theft."
-    ],
-    "harassment_threat": [
-        "A person threatened, harassed, intimidated, or stalked another person.",
-        "There was abusive or threatening behavior without confirmed physical attack.",
-        "The victim faced intimidation, verbal threats, or persistent harassment."
-    ],
-    "sexual_offense": [
-        "A sexual offense or sexual exploitation incident occurred.",
-        "There was molestation, voyeurism, trafficking for sexual exploitation, or non-consensual sexual conduct.",
-        "The incident involved sexual misconduct or abuse."
-    ],
-    "suspicious_activity": [
-        "Concerning or unusual behavior was observed, but no clear offense was confirmed.",
-        "A suspicious person was loitering, lurking, peeping, or trying door handles.",
-        "The activity suggested risk, but the exact crime was unclear.",
-        "Suspicious behavior was reported without enough evidence for a more specific crime label."
-    ],
-    "public_disorder": [
-        "There was disorderly or disruptive behavior affecting public peace.",
-        "A fight, aggressive disturbance, or serious nuisance occurred in public.",
-        "The incident involved public disorder rather than property crime or deception."
-    ]
-}
 
 CATEGORY_EMBEDDINGS = {
     cat: [get_embedding(text) for text in prototypes]
@@ -100,16 +43,21 @@ class State(TypedDict):
     source_platform: str
     source_url: str
     raw_text: str
+    
+
+    ## CLEANER FIELDS
+    cleaned_content: Optional[str]
+    topic_bucket: Optional[str]
+    location_text: Optional[str]
+    action_text: Optional[str]
+    normalized_time: Optional[str]
+
 
     ## CLASSIFIER FIELDS
     category: Optional[str]
+    category_score: Optional[float]
     authenticity_score: Optional[float]
     severity: Optional[float]
-
-    location: Optional[str]
-    time: Optional[str]
-    action: Optional[str]
-    incident_summary: Optional[str]
 
 
     ## DECISION FIELDS
@@ -122,6 +70,9 @@ class State(TypedDict):
 
     ## Retry Counter
     retry_count: int
+
+
+
 
 # =========================================================
 # 2. CRAWLER NODE
@@ -159,95 +110,42 @@ def crawler_node(state: State) -> dict:
 # - severity scoring
 # =========================================================
 def classifier_node(state: State) -> dict:
-    text = state["raw_text"].lower()
+    cleaned_content = state.get("cleaned_content")
+
+    if not cleaned_content:
+        raise ValueError("Classifier received incident without cleaned_content")
+
+    text = cleaned_content.lower()
 
     # Get messages meant for classifier
-    # MOCK: Simulating agent receiving feedback (instead of real LLM reading messages)
     feedback_msgs = [
         m for m in state["messages"]
         if m.get("feedback_to") == "classifier"
     ]
 
-    # ---------- EXTRACT LOCATION, TIME, ACTION ----------
-    location = None
-    time = None
-    action = None
-    incident_summary = None
+    location_text = state.get("location_text")
+    normalized_time = state.get("normalized_time")
+    topic_bucket = state.get("topic_bucket")
+    action_text = state.get("action_text")
 
-    prompt = f"""
-    You are an extraction agent for petty crime reports in Singapore.
-
-    Text:
-    {state["raw_text"]}
-
-    Extract the following fields from the text:
-    - location
-    - time
-    - action
-    - incident_summary
-
-    Rules:
-    - Use null if a field is not clearly present
-    - Keep values short and literal
-    - Do not infer extra details not supported by the text
-    - incident_summary should be one short sentence capturing what happened
-
-    Respond ONLY in JSON:
-    {{
-        "location": "... or null",
-        "time": "... or null",
-        "action": "... or null",
-        "incident_summary": "... or null"
-    }}
-    """
-
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    raw = response.choices[0].message.content
-    raw = raw.replace("```json", "").replace("```", "").strip()
-
-    try:
-        result = json.loads(raw)
-
-        if not isinstance(result, dict):
-            raise ValueError
-
-    except (json.JSONDecodeError, ValueError):
-        result = {
-            "location": None,
-            "time": None,
-            "action": None,
-            "incident_summary": None
-        }
-
+    if topic_bucket == "other":
         state["messages"].append({
             "agent": "classifier",
-            "note": "LLM extraction failed, fallback used",
-            "raw_output": raw
+            "note": "Rejected because cleaner marked the post as unrelated or insufficiently relevant."
         })
 
-    location = result.get("location")
-    time = result.get("time")
-    action = result.get("action")
-    incident_summary = result.get("incident_summary")
-
-    state["messages"].append({
-        "agent": "classifier",
-        "reasoning": "LLM extraction completed",
-        "extracted_fields": {
-            "location": location,
-            "time": time,
-            "action": action,
-            "incident_summary": incident_summary
+        return {
+            "category": None,
+            "category_score": 0,
+            "authenticity_score": 0,
+            "severity": 0,
+            "decision": "reject",
+            "messages": state["messages"]
         }
-    })
 
     # ---------- Category via Vector Similarity ----------
 
-    incident_text_for_embedding = incident_summary or state["raw_text"]
+    incident_text_for_embedding = cleaned_content
     incident_embedding = get_embedding(incident_text_for_embedding)
 
     candidate_scores = {}
@@ -257,7 +155,9 @@ def classifier_node(state: State) -> dict:
             cosine_similarity([incident_embedding], [emb])[0][0]
             for emb in prototype_embs
         ]
-        candidate_scores[cat] = round(max(scores), 4)
+
+        # Average similarity is more stable than max similarity
+        candidate_scores[cat] = round(sum(scores) / len(scores), 4)
 
     sorted_scores = dict(
         sorted(candidate_scores.items(), key=lambda x: x[1], reverse=True)
@@ -265,6 +165,16 @@ def classifier_node(state: State) -> dict:
 
     category = next(iter(sorted_scores))
     best_score = sorted_scores[category]
+
+    score_values = list(sorted_scores.values())
+    second_score = score_values[1] if len(score_values) > 1 else 0
+    margin = round(best_score - second_score, 4)
+
+    # Avoid forcing weak matches into crime categories
+    if category != "other" and best_score < 0.28:
+        category = "other"
+
+    category_score = best_score
 
     state["messages"].append({
         "agent": "classifier",
@@ -280,13 +190,17 @@ def classifier_node(state: State) -> dict:
         You are a petty crime reasoning agent for Singapore.
 
         Text:
-        {state["raw_text"]}
+        {cleaned_content}
 
         Final category selected by vector similarity:
         {category}
 
         Feedback:
         {feedback_msgs}
+
+        Action:
+        {action_text}
+        
 
         Explain why this category fits the text, or explain what evidence is weak.
 
@@ -328,12 +242,14 @@ def classifier_node(state: State) -> dict:
     You are evaluating a petty crime report using a scoring rubric.
 
     Text:
-    {state["raw_text"]}
+    {cleaned_content}
 
     Extracted Fields:
-    location={location}
-    time={time}
-    action={action}
+    location={location_text}
+    time={normalized_time}
+    action={action_text}
+    category={category}
+    category_score={category_score}
 
     Extract whether the following features are present (true/false):
 
@@ -489,11 +405,8 @@ def classifier_node(state: State) -> dict:
     })
 
     return {
-        "location": location,
-        "time": time,
-        "action": action,
-        "incident_summary": incident_summary,
         "category": category,
+        "category_score": category_score,
         "authenticity_score": authenticity_score,
         "severity": severity,
         "messages": state["messages"]
@@ -539,9 +452,11 @@ def decision_node(state: State) -> dict:
     category: {state["category"]}
     authenticity_score: {state["authenticity_score"]}
     severity: {state["severity"]}
-    location: {state["location"]}
-    time: {state["time"]}
-    action: {state["action"]}
+    cleaned_content: {state["cleaned_content"]}
+    location: {state["location_text"]}
+    time: {state["normalized_time"]}
+    action: {state["action_text"]}
+    category_score: {state["category_score"]}
     retry_count: {state["retry_count"]}
 
     Authenticity Score interpretation:
@@ -554,10 +469,15 @@ def decision_node(state: State) -> dict:
     - Community reports do not require police reports, media, or multiple witnesses to be publishable.
 
     Rules:
+    - Relevance comes before authenticity. A factual article can still be rejected if it is not a concrete petty-crime, scam, public safety, or disorder incident.
+    - Reject non-incident news, including business news, legal commentary, political news, trend articles, corporate disputes, celebrity news, and general discussion.
+    - Do not publish general news unless it describes a concrete crime, scam, public safety, or disorder incident.
     - Reports with concrete location, time, and action should generally be publishable even without witness statements, media, or police reports.
     - Do not require corroborating evidence for ordinary community petty-crime reports if the incident details are specific and coherent.
     - Use "needs_retry" only if missing information could realistically be improved.
-    - Prefer "publish" over repeated retries when location, time, and action are already concrete.
+    - Prefer "reject" if the post is factual but not relevant to petty crime or public safety.
+    - Reject non-incident news, Business/legal/political/trend articles should be rejected
+    - Reject overseas incidents unless the incident occurred in Singapore or creates a direct public-safety risk in Singapore
 
     Respond ONLY in JSON:
     {{
@@ -636,7 +556,7 @@ def decision_node(state: State) -> dict:
 # =========================================================
 def edge_after_decision(state: State) -> dict:
     if state["decision"] == "needs_retry":
-        return "crawler"
+        return "classifier"
     return END
 
 
@@ -688,12 +608,18 @@ def prepare_initial_state(post: dict) -> State:
         "source_url": post["source_url"],
         "raw_text": post["raw_text"],
 
-        "location": None,
-        "time": None,
-        "action": None,
-        "incident_summary": None,
+        # cleaner output fields
+        "cleaned_content": post.get("cleaned_content"),
+        "topic_bucket": post.get("topic_bucket"),
+        "location_text": post.get("location_text"),
+        "action_text": post.get("action_text"),
+        "latitude": post.get("latitude"),
+        "longitude": post.get("longitude"),
+        "normalized_time": post.get("normalized_time"),
 
+        # classifier output fields
         "category": None,
+        "category_score": None,
         "authenticity_score": None,
         "severity": None,
 
@@ -760,9 +686,11 @@ if __name__ == "__main__":
         print(f"Category: {result['category']}")
         print(f"Authenticity Score: {round(result['authenticity_score'], 2)}")
         print(f"Severity: {result['severity']}")
-        print(f"Location: {result['location']}")
-        print(f"Time: {result['time']}")
-        print(f"Action: {result['action']}")
+        print(f"Location: {result['location_text']}")
+        print(f"Action: {result['action_text']}")
+        print(f"Time: {result['normalized_time']}")
+        print(f"Cleaned Content: {result['cleaned_content']}")
+        print(f"Category Score: {result['category_score']}")
 
         # Show ONLY key reasoning (not spam)
         last_reasoning = None

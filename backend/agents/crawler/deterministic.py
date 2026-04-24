@@ -12,57 +12,157 @@ DEFAULT_INPUT_PATH = PROJECT_ROOT / "data" / "sample_posts.json"
 DEFAULT_OUTPUT_PATH = PROJECT_ROOT / "data" / "incident_drafts.json"
 
 
-CATEGORY_RULES: dict[str, list[str]] = {
+CATEGORY_DEFINITIONS = {
     "theft": [
-        "stolen",
-        "stole",
-        "theft",
-        "snatched",
-        "missing wallet",
-        "missing phone",
-        "pickpocket",
-        "shoplift",
-        "took my",
-        "taken from",
+        "Someone stole a wallet, phone, bag, bicycle, parcel, or personal item.",
+        "A person took unattended property without permission.",
+        "Shoplifting occurred at a store or supermarket.",
+        "A victim reported missing belongings believed to be stolen.",
+        "Property was taken without force, threats, or unlawful entry.",
+        "A delivery parcel was stolen from a doorstep or lobby.",
+        "A bicycle or e-scooter was stolen from a rack or public area.",
+        "A person dishonestly took another person's belongings but did not use violence.",
     ],
-    "attempted_theft": [
-        "attempted theft",
-        "tried to steal",
-        "trying to steal",
-        "almost stole",
-        "tried opening",
-        "trying car doors",
-        "checking bicycle locks",
+
+    "burglary": [
+        "Someone broke into a home, shop, office, or private premises.",
+        "A suspect entered a building unlawfully to steal or commit an offence.",
+        "Forced entry was reported at a residential or commercial unit.",
+        "A break-in occurred at a house, shop, or office.",
+        "Property was stolen after someone entered a premises illegally.",
+        "A door, window, lock, or gate was forced open during the incident.",
     ],
+
+    "robbery": [
+        "A victim was robbed by someone using force or threats.",
+        "Property was taken directly from a person through violence or intimidation.",
+        "A mugging occurred in a public place.",
+        "A snatch theft involved force or struggle with the victim.",
+        "A suspect threatened a victim before taking their belongings.",
+        "A victim was attacked and had items stolen.",
+    ],
+
+    "assault": [
+        "A person was punched, kicked, slapped, shoved, or physically attacked.",
+        "A victim was injured or attacked during a dispute.",
+        "Someone assaulted a driver, commuter, worker, or member of the public.",
+        "A fight resulted in physical harm.",
+        "A person was charged for attacking another person.",
+        "A victim reported bodily violence without property being stolen.",
+        "A person physically attacked another person without theft being involved.",
+    ],
+
+    "violent_crime": [
+        "A murder, attempted murder, stabbing, or serious violent attack occurred.",
+        "A person was killed or seriously injured in a violent crime.",
+        "Police investigated a serious assault involving a weapon.",
+        "A victim suffered severe harm from a violent attack.",
+        "An official report described a serious local violent crime in Singapore.",
+        "A serious violent offence involved death, weapons, or severe bodily harm.",
+    ],
+
     "vandalism": [
-        "vandal",
-        "vandalism",
-        "spray painted",
-        "graffiti",
-        "scratched",
-        "smashed",
-        "damaged",
-        "broke the",
+        "Property was intentionally damaged, defaced, smashed, scratched, or spray-painted.",
+        "A wall, vehicle, shopfront, public facility, or building was vandalised.",
+        "Someone deliberately damaged public or private property.",
+        "Graffiti or deliberate property damage was reported.",
+        "Public infrastructure was damaged intentionally.",
     ],
+
+    "scam_fraud": [
+        "A scammer impersonated police, bank staff, government officers, or a company.",
+        "A victim lost money through deception or fraud.",
+        "A phishing, fake website, fake payment, or fake investment scam occurred.",
+        "Someone was cheated into transferring money or sharing personal information.",
+        "A fraudulent transaction or online scam was reported.",
+        "A fake buyer, seller, job offer, investment, or delivery scam was involved.",
+        "A person was deceived through impersonation, false claims, or dishonest promises.",
+    ],
+
+    "identity_document_fraud": [
+        "A person gave a false address, false identity, or false declaration to an authority.",
+        "Someone used fake documents, false details, or forged information.",
+        "A person lied on an official form or application.",
+        "A false address was used for school enrolment, official registration, or eligibility.",
+        "The incident involved identity fraud, document fraud, or false official information.",
+        "A person was charged or jailed for giving false information to authorities.",
+    ],
+
+    "harassment_threat": [
+        "A person was threatened, harassed, stalked, intimidated, or verbally abused.",
+        "Someone repeatedly disturbed or followed a victim.",
+        "A victim received threatening messages or aggressive remarks.",
+        "A person behaved aggressively without confirmed physical assault.",
+        "A harassment or intimidation incident was reported.",
+    ],
+
+    "sexual_offense": [
+        "A sexual offence, molestation, voyeurism, or non-consensual sexual conduct occurred.",
+        "A person distributed sexual images or sexual content unlawfully.",
+        "A victim was sexually harassed, exploited, trafficked, or abused.",
+        "An incident involved image-based sexual abuse or voyeurism.",
+        "A suspect was charged with a sexual offence.",
+    ],
+
     "suspicious_activity": [
-        "suspicious",
-        "loitering",
-        "following",
-        "checking doors",
-        "peeking into",
-        "filming units",
-        "tailgating",
-        "prowling",
+        "A suspicious person was loitering, lurking, peeping, or trying door handles.",
+        "Unusual behaviour was reported but no clear crime was confirmed.",
+        "A suspicious vehicle or person was seen near homes, shops, or public areas.",
+        "The activity suggested possible risk but lacked enough detail for a specific crime.",
+        "Someone reported concerning behaviour that may require attention.",
     ],
-    "harassment": [
-        "harassed",
-        "harassment",
-        "threatened",
-        "shouted at",
-        "followed me",
-        "cornered",
-        "kept bothering",
-        "intimidated",
+
+    "public_disorder": [
+        "A public fight, disturbance, nuisance, or disorderly behaviour occurred.",
+        "Someone caused a disturbance in a public place.",
+        "A person behaved dangerously or disruptively in public.",
+        "A public argument or confrontation affected public peace.",
+        "A mischief or nuisance incident occurred in a shared public area.",
+    ],
+
+    "regulatory_offence": [
+        "A person or company was fined for unauthorised works, licensing breaches, or regulatory violations.",
+        "A shophouse, building, or business was involved in illegal renovation or administrative enforcement.",
+        "The incident involved fines, permits, compliance, or regulatory enforcement.",
+        "A company or individual breached government regulations without a direct public safety incident.",
+        "This is an administrative offence rather than theft, burglary, robbery, or assault.",
+        "A business, building owner, or contractor breached rules or regulations.",
+    ],
+
+    "drug_offence": [
+        "A person was arrested for drug possession, trafficking, smuggling, or controlled substances.",
+        "Police or authorities found illegal drugs or controlled substances.",
+        "A suspect was charged with drug-related offences.",
+        "A person allegedly imported, sold, possessed, or trafficked drugs.",
+        "A controlled substance offence was reported.",
+    ],
+
+    "traffic_transport_offence": [
+        "A dangerous driving, hit-and-run, road rage, or reckless vehicle incident occurred.",
+        "A driver, cyclist, PMD rider, or motorist caused danger in public.",
+        "A transport-related offence affected public safety.",
+        "A taxi, private-hire, bus, MRT, or road incident involved unsafe behaviour.",
+        "A serious road or transport safety incident was reported.",
+        "A private-hire driver, taxi driver, passenger, or commuter was involved in a transport safety incident.",
+    ],
+
+    "other": [
+        "This is general news and not a concrete local Singapore crime or safety incident.",
+        "This is business, legal, political, celebrity, corporate, or trend news.",
+        "This is a court update or legal commentary without a direct local public safety incident.",
+        "This is a corporate feud, business dispute, political issue, or social discussion.",
+        "This is weather, lifestyle, economy, property, education, or opinion content.",
+        "This is an overseas incident without direct Singapore local public safety impact.",
+        "This is too vague, unclear, or irrelevant to classify as a crime incident.",
+        "This describes regulatory, administrative, or policy matters unless a concrete crime is involved.",
+        "Meal price disputes or customer complaints are not theft unless property was stolen.",
+        "Broadband outages, construction mistakes, and infrastructure disruptions are not crime unless intentional damage is reported.",
+        "POFMA, political speech, compliance orders, and activism-related charges are not sexual offences or public safety incidents.",
+        "Corporate resignations, billionaire disputes, and business leadership changes are not crime incidents.",
+        "Heritage business discussions and social commentary are not crime incidents.",
+        "Dating app bans or platform restrictions are not crime incidents unless a concrete offence is described.",
+        "Defamation trials and legal disputes are not public disorder unless they involve a direct safety incident.",
+        "A general trend article about betting, weather, or online behaviour is not a crime incident.",
     ],
 }
 
