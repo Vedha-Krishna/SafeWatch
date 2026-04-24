@@ -1,264 +1,206 @@
-# PettyCrimeSG — Full Project Documentation
+# PettyCrimeSG — Project Documentation
 
-> **Hackathon project** | Theme E: AI-native infrastructure for agent systems  
-> **Stack:** Python · FastAPI · LangGraph · OpenAI · Supabase · Next.js · Leaflet
+**Hackathon project** | Theme E: AI-native infrastructure for agent systems  
+**Stack:** Python · FastAPI · LangGraph · OpenAI · Supabase · Next.js · Leaflet
 
 ---
 
 ## Table of Contents
 
-1. [Project Overview](#1-project-overview)
-2. [Repository Structure](#2-repository-structure)
-3. [Architecture Overview](#3-architecture-overview)
-4. [Data Flow — End to End](#4-data-flow--end-to-end)
+1. [What This Project Does](#1-what-this-project-does)
+2. [Folder Structure](#2-folder-structure)
+3. [How It All Fits Together](#3-how-it-all-fits-together)
+4. [Step-by-Step Data Flow](#4-step-by-step-data-flow)
 5. [Backend](#5-backend)
-   - 5.1 [FastAPI Application](#51-fastapi-application-backendmainpy)
+   - 5.1 [API Server (main.py)](#51-api-server-mainpy)
    - 5.2 [Crawler Agent](#52-crawler-agent)
    - 5.3 [Cleaner Agent](#53-cleaner-agent)
    - 5.4 [Classifier Agent](#54-classifier-agent)
    - 5.5 [Decision Agent](#55-decision-agent)
    - 5.6 [LangGraph Pipeline](#56-langgraph-pipeline)
-   - 5.7 [Multimodal Verifier](#57-multimodal-verifier-utility)
-6. [Database Layer](#6-database-layer)
+   - 5.7 [Multimodal Verifier](#57-multimodal-verifier)
+6. [Database](#6-database)
    - 6.1 [Supabase Client](#61-supabase-client)
    - 6.2 [Incidents Table](#62-incidents-table)
    - 6.3 [Agent Feedback Table](#63-agent-feedback-table)
    - 6.4 [Mock Official Reports Table](#64-mock-official-reports-table)
 7. [API Reference](#7-api-reference)
 8. [Frontend](#8-frontend)
-   - 8.1 [Application Shell](#81-application-shell)
-   - 8.2 [Zustand Store](#82-zustand-store)
+   - 8.1 [App Shell](#81-app-shell)
+   - 8.2 [Store (Zustand)](#82-store-zustand)
    - 8.3 [Map View](#83-map-view)
    - 8.4 [Incident Detail Panel](#84-incident-detail-panel)
    - 8.5 [Severity Sidebar](#85-severity-sidebar)
    - 8.6 [Mock Data](#86-mock-data)
-9. [Shared Data Schemas](#9-shared-data-schemas)
-10. [Feedback Loop System](#10-feedback-loop-system)
+9. [Data Schemas](#9-data-schemas)
+10. [Agent Feedback Loop](#10-agent-feedback-loop)
 11. [Environment Variables](#11-environment-variables)
 12. [Setup and Running](#12-setup-and-running)
-13. [Known Limitations and Bugs](#13-known-limitations-and-bugs)
-14. [Ethics and Safety Rules](#14-ethics-and-safety-rules)
+13. [Known Issues](#13-known-issues)
+14. [Ethics Rules](#14-ethics-rules)
 
 ---
 
-## 1. Project Overview
+## 1. What This Project Does
 
-PettyCrimeSG is a multi-agent OSINT (Open Source Intelligence) system that monitors community posts from platforms like Reddit and automatically identifies, evaluates, and maps potentially unreported petty-crime incidents in Singapore.
+People post about petty crimes (theft, vandalism, harassment) on Reddit all the time, but those posts are messy and hard to act on. PettyCrimeSG reads those posts, figures out which ones are likely real incidents, and puts them on an interactive map of Singapore.
 
-**The core problem it solves:** Community members frequently post about petty crimes (theft, harassment, vandalism) on social media, but these reports are unstructured, noisy, and often go unnoticed by authorities. PettyCrimeSG converts these noisy posts into structured, scored, map-ready incident records using a pipeline of AI agents.
+**The pipeline in plain English:**
 
-**What the system does:**
+1. Pull posts from Reddit (or load from a test JSON file)
+2. Throw out jokes, opinions, vague warnings, and duplicates
+3. Extract the key details: what happened, where, and when
+4. Score each post — how likely is it to be real? How serious?
+5. Decide: publish it, send it back for more info, or reject it
+6. Save approved incidents to a database
+7. Show them as pins on a live Singapore map
 
-1. Ingests raw text posts from Reddit or mock JSON files
-2. Filters posts by relevance — rejecting jokes, vague warnings, duplicates, and opinions
-3. Extracts structured fields: crime category, location, time, and action
-4. Scores each post for authenticity and severity using an LLM rubric
-5. Decides whether to publish, reject, or retry each incident
-6. Stores published incidents in a Supabase database
-7. Displays them as interactive map pins on a live Singapore map
+**Crime types the system handles:**
 
-**Incident categories covered:**
-
-| Category | Description |
+| Type | What it covers |
 |---|---|
-| `theft` | Stealing, snatch theft, pickpocketing |
-| `attempted_theft` | Tried but failed to steal |
-| `vandalism` | Graffiti, property damage |
-| `suspicious_activity` | Loitering, prowling, suspicious behaviour |
-| `harassment` | Threats, intimidation, following |
+| `theft` | Stealing, pickpocketing, snatch theft |
+| `attempted_theft` | Tried to steal but failed |
+| `vandalism` | Graffiti, broken property |
+| `suspicious_activity` | Loitering, prowling, anything that feels off |
+| `harassment` | Threats, intimidation, being followed |
 
-**Posts that are always rejected:**
+**Posts that always get rejected:**
 
 - Jokes, memes, satire
-- General opinions ("Singapore is getting worse")
-- Vague warnings ("be careful everyone")
-- Non-crime complaints (train delays, bad service)
-- Incidents already in official/mainstream news
-- Duplicate reposts of the same incident
+- Opinions ("Singapore crime is so bad these days")
+- Vague warnings ("everyone be careful!")
+- Non-crime complaints (MRT delays, bad service)
+- Anything already covered in official news
+- Duplicate posts about the same incident
 
 ---
 
-## 2. Repository Structure
+## 2. Folder Structure
 
 ```
 HORNY_APPLE/
-├── .env.example                    # Environment variable template
-├── .gitignore
+├── .env.example                    # Copy this to .env and fill in your keys
 ├── README.md                       # Quick-start guide
-├── graph.png                       # LangGraph pipeline visualisation
+├── graph.png                       # Picture of the LangGraph pipeline
 │
 ├── backend/
-│   ├── __init__.py
-│   ├── main.py                     # FastAPI app — all HTTP routes
-│   ├── orchestration.py            # Standalone pipeline runner (CLI)
-│   ├── requirements.txt            # Python dependencies
+│   ├── main.py                     # All API routes live here
+│   ├── orchestration.py            # Run the pipeline from the command line
+│   ├── requirements.txt            # Python packages needed
 │   │
 │   ├── agents/
-│   │   ├── __init__.py
-│   │   │
 │   │   ├── cleaner/
-│   │   │   └── cleaner_agent.py    # LLM-based cleaner (standalone)
+│   │   │   └── cleaner_agent.py    # Rewrites messy posts into clean summaries
 │   │   │
 │   │   ├── crawler/
-│   │   │   ├── __init__.py
-│   │   │   ├── deterministic.py    # Keyword-based crawler (main crawler)
-│   │   │   ├── multimodal.py       # OpenAI vision/audio evidence verifier
-│   │   │   ├── reddit_crawler.py   # Live Reddit scraper
-│   │   │   ├── orchestration6_DB.py  # Full LangGraph pipeline v6 (LLM + DB)
-│   │   │   ├── orchestration7.py     # Full LangGraph pipeline v7 (improved embeddings)
-│   │   │   ├── orchestration2.py     # Earlier prototype
-│   │   │   ├── orchestration3 LLM.py
-│   │   │   ├── orchestration4 LLM.py
-│   │   │   ├── orchestration5 LLM.py
-│   │   │   ├── orchestration6 DB.py  # Duplicate (space in name)
-│   │   │   ├── process incidents.py  # Earlier prototype
-│   │   │   └── process_incidents.py  # Earlier prototype
+│   │   │   ├── deterministic.py    # Keyword-based post filter (main crawler)
+│   │   │   ├── reddit_crawler.py   # Pulls live posts from Reddit
+│   │   │   ├── multimodal.py       # Checks if images/videos support a post
+│   │   │   ├── orchestration6_DB.py  # Full LangGraph pipeline (saves to DB)
+│   │   │   └── orchestration7.py     # Improved version with better categories
 │   │   │
 │   │   └── langchain/
-│   │       ├── __init__.py
-│   │       ├── state.py            # LangGraph TypedDict state
-│   │       ├── cleaner.py          # LangGraph cleaner node
-│   │       ├── classifier.py       # LangGraph classifier node
-│   │       ├── decider.py          # LangGraph decision node
-│   │       └── workflow.py         # LangGraph graph assembly
+│   │       ├── state.py            # Defines what data flows through the graph
+│   │       ├── cleaner.py          # Cleaner step inside the graph
+│   │       ├── classifier.py       # Classifier step inside the graph
+│   │       ├── decider.py          # Decision step — also saves to Supabase
+│   │       └── workflow.py         # Assembles all steps into a graph
 │   │
 │   └── db/
-│       ├── __init__.py             # Package exports
-│       ├── supabase.py             # Supabase client setup
-│       ├── incidents.py            # incidents table CRUD
-│       ├── feedback.py             # agent_feedback table CRUD
-│       └── mock_reports.py         # mock_official_reports table CRUD
+│       ├── supabase.py             # Sets up the database connection
+│       ├── incidents.py            # Read/write incidents table
+│       ├── feedback.py             # Read/write agent feedback table
+│       └── mock_reports.py         # Read/write mock official reports table
 │
 ├── data/
-│   ├── .gitkeep
-│   ├── category_keywords.json      # Keyword definitions (reference)
-│   ├── incident_drafts.json        # Crawler output (auto-generated)
-│   ├── mock_posts.json             # 10 mock posts for pipeline testing
-│   └── sample_posts.json           # 15+ mock posts for API testing
+│   ├── category_keywords.json      # Keywords for each crime type
+│   ├── incident_drafts.json        # Output from the crawler (auto-generated)
+│   ├── mock_posts.json             # 10 test posts for pipeline testing
+│   └── sample_posts.json           # 15+ test posts for API testing
 │
 ├── docs/
-│   ├── .gitkeep
-│   ├── project_brief.md            # Original project brief
 │   └── DOCUMENTATION.md            # This file
 │
 └── frontend/
-    ├── .gitignore
-    ├── eslint.config.mjs
     ├── next.config.ts
     ├── package.json
-    ├── postcss.config.mjs
-    ├── tsconfig.json
-    │
     ├── public/
-    │   ├── file.svg
-    │   ├── globe.svg
-    │   ├── next.svg
-    │   ├── vercel.svg
-    │   ├── window.svg
     │   └── data/
-    │       └── sg-planning-areas.geojson   # Singapore planning area polygons
-    │
+    │       └── sg-planning-areas.geojson   # Singapore map area polygons
     └── src/
-        ├── App.tsx
-        ├── index.css
         ├── app/
-        │   ├── favicon.ico
         │   ├── globals.css
         │   ├── layout.tsx
         │   └── page.tsx
         └── components/
             └── safewatch/
-                ├── Dashboard.tsx           # Root layout component
-                ├── Header.tsx              # Top navigation bar
-                ├── MapView.tsx             # Leaflet map with pins
-                ├── IncidentDetailPanel.tsx # Slide-in incident detail
+                ├── Dashboard.tsx           # Root layout
+                ├── Header.tsx              # Top nav bar
+                ├── MapView.tsx             # Map with pins
+                ├── IncidentDetailPanel.tsx # Slide-in panel for one incident
                 ├── SeveritySidebar.tsx     # Filterable incident list
-                ├── mockData.ts             # 55 mock incidents + types
-                └── store.ts                # Zustand global state
+                ├── mockData.ts             # 55 fake incidents for testing
+                └── store.ts                # Global state (Zustand)
 ```
 
 ---
 
-## 3. Architecture Overview
+## 3. How It All Fits Together
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        DATA SOURCES                             │
-│  Reddit r/singapore (live)    Mock JSON files (development)     │
-└──────────────────┬──────────────────────────────────────────────┘
-                   │ raw text posts
-                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      CRAWLER AGENT                              │
-│  deterministic.py — keyword filtering, rejection rules,         │
-│  duplicate detection, location/time extraction                  │
-│                                                                 │
-│  reddit_crawler.py — live Reddit scraper with HuggingFace       │
-│  zero-shot classifier for relevance filtering                   │
-└──────────────────┬──────────────────────────────────────────────┘
-                   │ candidate incident drafts
-                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      CLEANER AGENT                              │
-│  cleaner_agent.py — GPT-4o-mini rewrites raw text into formal   │
-│  1-2 sentence summary; normalises location, time, coordinates   │
-└──────────────────┬──────────────────────────────────────────────┘
-                   │ cleaned incident
-                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     CLASSIFIER AGENT                            │
-│  orchestration6_DB.py / orchestration7.py                       │
-│  — Vector similarity category selection (OpenAI embeddings)     │
-│  — LLM rubric-based authenticity scoring                        │
-│  — LLM severity scoring                                         │
-└──────────────────┬──────────────────────────────────────────────┘
-                   │ scored incident
-                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      DECISION AGENT                             │
-│  — LLM final verdict: publish / needs_retry / reject            │
-│  — Max 2 revision cycles                                        │
-│  — Sends feedback messages to Classifier if needs_retry         │
-└──────────────────┬──────────────────────────────────────────────┘
-                   │ publish decision
-                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     SUPABASE DATABASE                           │
-│  incidents table — published, rejected, queued, in_progress     │
-│  agent_feedback table — inter-agent feedback messages           │
-│  mock_official_reports table — official report reference data   │
-└──────────────────┬──────────────────────────────────────────────┘
-                   │ GET /api/db/incidents?published_only=true
-                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    FASTAPI BACKEND                              │
-│  main.py — serves incidents, feedback, and official reports     │
-└──────────────────┬──────────────────────────────────────────────┘
-                   │ JSON over HTTP
-                   ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   NEXT.JS FRONTEND                              │
-│  Leaflet map — Singapore planning area pins, severity colours   │
-│  Filters — crime type, time range                               │
-│  Sidebar — incident list with severity indicators               │
-│  Detail panel — full incident breakdown with agent analysis     │
-└─────────────────────────────────────────────────────────────────┘
+DATA SOURCES
+  Reddit r/singapore (live)  |  Mock JSON files (for testing)
+              │
+              ▼
+        CRAWLER AGENT
+  Filters posts by keywords, rejects bad ones,
+  extracts location and time
+              │
+              ▼
+        CLEANER AGENT
+  GPT-4o-mini rewrites the post as a clean 1–2 sentence summary.
+  Fills in proper location name, coordinates, and timestamp.
+              │
+              ▼
+      CLASSIFIER AGENT
+  Picks the crime category using vector similarity.
+  Scores the post for authenticity and severity.
+              │
+              ▼
+       DECISION AGENT
+  Says: publish / needs_revision / reject.
+  Saves the result to Supabase.
+              │
+              ▼
+      SUPABASE DATABASE
+  Stores all incidents with their status and scores.
+              │
+  GET /api/db/incidents?published_only=true
+              │
+              ▼
+      FASTAPI BACKEND
+  Serves incidents to the frontend.
+              │
+              ▼
+     NEXT.JS FRONTEND
+  Shows incidents as coloured pins on a Singapore map.
 ```
 
-**Feedback loops** run in the opposite direction when an agent cannot complete its task:
+**Feedback runs backwards** when an agent can't finish its job:
 
 ```
-Decision Agent → Classifier  (re-evaluate ambiguous scores)
-Classifier     → Crawler     (location unclear, find more details)
+Decision Agent → Classifier  (re-score this incident)
+Classifier     → Crawler     (find more details about location)
 ```
 
 ---
 
-## 4. Data Flow — End to End
+## 4. Step-by-Step Data Flow
 
-### Step 1 — Post ingestion
+### Step 1 — Post comes in
 
-A raw post enters the pipeline as a plain dictionary with these fields:
+A post enters the system as a simple object:
 
 ```json
 {
@@ -270,55 +212,64 @@ A raw post enters the pipeline as a plain dictionary with these fields:
 }
 ```
 
-### Step 2 — Crawler processing (`deterministic.py`)
+### Step 2 — Crawler filters it (`deterministic.py`)
 
-The deterministic crawler:
-1. Sanitises text — strips `@mentions` and phone numbers
-2. Runs rejection rules — rejects jokes, vague warnings, opinions
-3. Runs keyword scoring — matches against 5 crime category keyword lists
-4. Checks for duplicates — compares normalised text against seen posts
-5. Extracts location — substring-matches against 28 Singapore place names
-6. Extracts time — regex-matches against time phrases
+1. Strips `@mentions` and phone numbers from the text
+2. Checks rejection rules — throws out jokes, vague posts, opinions
+3. Scores the post against each crime category using keyword matches
+4. Checks for duplicates against posts already seen
+5. Finds a Singapore place name in the text (matches against 28 names)
+6. Finds a time phrase using regex
 
-Output: an **incident draft** with `candidate: true/false`, `status`, `category`, `location_text`, `timestamp_text`, `lat: null`, `lng: null`.
+Output: an incident draft with `candidate: true/false`, `category`, `location_text`, and `lat/lng` set to `null` (geocoding happens later).
 
-### Step 3 — Cleaner processing (`cleaner_agent.py`)
+### Step 3 — Cleaner rewrites it (`cleaner_agent.py`)
 
-For queued incidents in Supabase with `status=queued` and no `cleaned_content`:
-1. Locks the incident (`status=in_progress`, `locked_by=cleaner_agent`)
-2. Sends `raw_text` to GPT-4o-mini with instructions to produce a `CleanedIncident` object
-3. The LLM outputs: `cleaned_content`, `topic_bucket`, `location_text`, `latitude`, `longitude`, `normalized_time`
-4. Writes results back to Supabase and resets `status=queued` for the classifier
+Runs on posts stored in Supabase with `status=queued`:
 
-### Step 4 — Classification (`orchestration6_DB.py` / `orchestration7.py`)
+1. Locks the row so no other agent touches it at the same time
+2. Sends the raw text to GPT-4o-mini with a prompt to produce a clean summary
+3. GPT returns: `cleaned_content`, `location_text`, `latitude`, `longitude`, `normalized_time`
+4. Saves results back to Supabase
 
-The LangGraph classifier node:
-1. Sends `raw_text` to GPT-4o-mini to extract `location`, `time`, `action` as structured fields
-2. Embeds the text using `text-embedding-3-small`
-3. Computes cosine similarity against category prototype embeddings to select the best crime category
-4. Sends `raw_text` + extracted fields to GPT-4o-mini with a 19-feature rubric prompt
-5. Computes `authenticity_score` and `severity` from the rubric feature flags
+### Step 4 — Classifier scores it
 
-### Step 5 — Decision (`decision_node` in orchestration files)
+1. GPT-4o-mini extracts `location`, `time`, `action` as structured fields
+2. The text is embedded using `text-embedding-3-small`
+3. Cosine similarity against category prototypes picks the crime type
+4. A 19-feature scoring rubric gives an `authenticity_score` and `severity`
 
-The Decision Agent:
-1. Receives `category`, `authenticity_score`, `severity`, `location`, `time`, `action`, `retry_count`
-2. Asks GPT to decide: `publish`, `needs_retry`, or `reject`
-3. If `needs_retry` and `retry_count < 2`: increments retry count, sends feedback to Classifier, routes back
-4. If `retry_count >= 2`: forces `reject`
-5. If `publish` or `reject`: ends the graph
+**The rubric has 4 parts:**
 
-### Step 6 — Storage and display
+| Part | Weight | What it checks |
+|---|---|---|
+| Detail | 25% | Specific location, time, action, person, outcome |
+| Evidence | 25% | First-hand, clear description, media, links, follow-up |
+| Consistency | 15% | No contradictions, fields align, no exaggeration |
+| Risk flags | −5% | Rumour language, missing location/time, ragebait |
 
-Published incidents are stored in Supabase's `incidents` table with `status=published`. The FastAPI endpoint `GET /api/db/incidents?published_only=true` serves them to the frontend. The Next.js map reads `location.area` to match each incident to a Singapore planning area polygon and displays a heat-density pin.
+```
+authenticity_score = (0.25 × detail) + (0.25 × evidence) + (0.15 × consistency) − (0.05 × risk)
+severity           = (0.4 × detail) + (0.3 × evidence) + (0.3 × risk)
+```
+
+### Step 5 — Decision Agent decides
+
+1. If `authenticity_score >= 0.7` and `category` is known → `publish`
+2. Otherwise → `needs_revision` (up to 2 retries, then forced reject)
+3. **Saves the result to Supabase** — status becomes `published`, `rejected`, or `needs_revision`
+
+### Step 6 — Frontend shows it
+
+Published incidents are served by `GET /api/db/incidents?published_only=true`. The Next.js map matches each incident's `location.area` to a Singapore planning area polygon and draws a coloured pin.
 
 ---
 
 ## 5. Backend
 
-### 5.1 FastAPI Application (`backend/main.py`)
+### 5.1 API Server (`main.py`)
 
-The entry point for all HTTP traffic. Starts with:
+Start the server from the project root:
 
 ```bash
 python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
@@ -326,72 +277,65 @@ python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 
 Interactive docs: `http://127.0.0.1:8000/docs`
 
-**CORS:** Allows `localhost:3000` and `127.0.0.1:3000` (the Next.js dev server).
+**All routes:**
 
-**Route summary:**
-
-| Method | Path | Description |
+| Method | Path | What it does |
 |---|---|---|
-| `GET` | `/` | API info, database status |
+| `GET` | `/` | API info and database status |
 | `GET` | `/health` | Health check |
-| `GET` | `/api/incidents` | Incidents from local JSON file (dev fallback) |
-| `GET` | `/api/db/incidents` | Incidents from Supabase |
-| `GET` | `/api/db/incidents/{id}` | Single incident by UUID |
-| `GET` | `/api/db/incidents/{id}/feedback` | Agent feedback log for incident |
-| `POST` | `/api/db/incidents` | Save a new incident |
-| `POST` | `/api/db/incidents/{id}/feedback` | Send agent feedback |
-| `GET` | `/api/db/official-reports` | All mock official reports |
+| `GET` | `/api/incidents` | Runs the crawler on a local JSON file (no database needed) |
+| `GET` | `/api/db/incidents` | Gets incidents from Supabase |
+| `GET` | `/api/db/incidents/{id}` | Gets one incident by UUID |
+| `GET` | `/api/db/incidents/{id}/feedback` | Gets agent feedback history for one incident |
+| `POST` | `/api/db/incidents` | Saves a new incident to the database |
+| `POST` | `/api/db/incidents/{id}/feedback` | Sends agent-to-agent feedback |
+| `GET` | `/api/db/official-reports` | Gets all mock official reports |
+| `POST` | `/api/pipeline/run` | Runs the LangGraph pipeline on a list of posts |
 
-**Query parameters for `GET /api/db/incidents`:**
+**Query params for `GET /api/db/incidents`:**
 
-| Parameter | Type | Default | Description |
+| Param | Type | Default | Description |
 |---|---|---|---|
-| `status` | `string` | `null` | Filter by status (`published`, `rejected`, etc.) |
-| `published_only` | `bool` | `false` | Shortcut: return only published incidents |
-| `limit` | `int` | `50` | Max rows returned (1–500) |
+| `status` | string | null | Filter by status (`published`, `rejected`, etc.) |
+| `published_only` | bool | false | Shortcut — return only published incidents |
+| `limit` | int | 50 | Max rows (1–500) |
 
 ---
 
 ### 5.2 Crawler Agent
 
-There are two crawler implementations:
+Two versions exist:
 
-#### `deterministic.py` — Keyword-based crawler
+#### `deterministic.py` — Keyword-based (main crawler)
 
-Used as the primary development crawler. Processes posts from `data/sample_posts.json`.
+Reads posts from `data/sample_posts.json`. Uses keyword lists and regex — no AI calls.
 
-**Constants:**
+**Key lists:**
 
-| Constant | Purpose |
+| Name | Purpose |
 |---|---|
-| `CATEGORY_RULES` | 5 crime categories, each with a list of trigger keywords |
-| `REJECTION_RULES` | 5 rejection categories (joke, vague, opinion, complaint, mainstream) |
-| `LOCATION_HINTS` | 28 Singapore place names for string matching |
-| `TIME_PATTERNS` | 4 regex patterns for relative and absolute time expressions |
+| `CATEGORY_RULES` | Keywords for each of the 5 crime types |
+| `REJECTION_RULES` | Rules for jokes, vague posts, opinions, complaints, news |
+| `LOCATION_HINTS` | 28 Singapore place names |
+| `TIME_PATTERNS` | 4 regex patterns for time phrases |
 
-**Scoring formula:**
+**Score formula:**
 
 ```
-score = min(1.0, 0.35 + (0.25 × number_of_keyword_matches))
+score = min(1.0, 0.35 + (0.25 × keyword_matches))
 ```
 
-Scores cap at: 1 match → 0.60, 2 matches → 0.85. Latitude and longitude are always `None` — geocoding is delegated to the Cleaner Agent.
+1 match → 0.60, 2 matches → 0.85. Coordinates are always `None` here — the Cleaner handles geocoding.
 
-**Key functions:**
+**Main functions:**
 
-| Function | Description |
+| Function | What it does |
 |---|---|
-| `sanitize_text(text)` | Strips @mentions and phone numbers |
-| `score_categories(text)` | Returns per-category keyword hit scores |
-| `pick_category(scores)` | Selects the top category by score + priority tiebreaker |
-| `extract_location(text)` | Returns the first matching Singapore place name |
-| `extract_time(text)` | Returns the first regex-matched time phrase |
-| `rejection_reason(text)` | Returns the first matched rejection rule label |
-| `process_post(post, seen)` | Full pipeline for one post; returns incident draft dict |
-| `process_posts(posts)` | Batch-processes a list of posts |
-| `load_posts(path)` | Reads and validates a JSON posts file |
+| `process_post(post, seen)` | Runs the full pipeline for one post |
+| `process_posts(posts)` | Runs it for a list of posts |
+| `load_posts(path)` | Reads and validates a JSON file |
 
-**Running the crawler standalone:**
+**Run it directly:**
 
 ```bash
 python -m backend.agents.crawler.deterministic --input data/sample_posts.json --output data/incident_drafts.json
@@ -399,33 +343,28 @@ python -m backend.agents.crawler.deterministic --input data/sample_posts.json --
 
 #### `reddit_crawler.py` — Live Reddit scraper
 
-Fetches posts from `r/singapore` using Reddit's public JSON API (no OAuth required). Uses a HuggingFace zero-shot classifier (`facebook/bart-large-mnli`) to filter posts by relevance before saving them to Supabase.
+Pulls posts from `r/singapore` using Reddit's public JSON API (no login needed). Uses a HuggingFace zero-shot classifier to filter for relevant posts.
 
-**Key constants:**
+**Key settings:**
 
-| Constant | Value | Description |
+| Setting | Value | Purpose |
 |---|---|---|
 | `DEFAULT_SUBREDDIT` | `"singapore"` | Target subreddit |
-| `RELEVANT_LABEL` | `"petty crime, theft, or scam"` | Positive class for zero-shot |
-| `OTHER_LABEL` | `"general news or casual conversation"` | Negative class |
 | `RELEVANCE_THRESHOLD` | `0.25` | Minimum confidence to keep a post |
-| `DEFAULT_REQUEST_DELAY` | `0.35s` | Polite delay between Reddit requests |
-| `DEFAULT_MAX_RETRIES` | `5` | Retry attempts on 429/5xx errors |
+| `DEFAULT_REQUEST_DELAY` | `0.35s` | Polite gap between requests |
 
-**Deduplication:** Queries the most recent `source_item_id` already in Supabase and stops scraping when it encounters a known post ID (incremental mode). Uses `dedupe_key = "reddit_{post_id}"` with Supabase upsert to prevent duplicate rows.
+**Deduplication:** Remembers the last seen `source_item_id` so it only pulls new posts each run.
 
-**Comment enrichment:** If `--include-comments` is set, posts that fail the first relevance check are re-evaluated after fetching up to 10 comment bodies.
-
-**Running the scraper:**
+**Run it:**
 
 ```bash
-# Dry run — print matching posts as JSON
+# Test — print matches without saving
 python -m backend.agents.crawler.reddit_crawler --stats --pretty
 
 # Save to Supabase
 python -m backend.agents.crawler.reddit_crawler --upload --stats
 
-# Backfill 100 newest posts, ignoring checkpoint
+# Pull 100 newest posts from scratch
 python -m backend.agents.crawler.reddit_crawler --backfill --upload
 ```
 
@@ -435,28 +374,22 @@ python -m backend.agents.crawler.reddit_crawler --backfill --upload
 
 **File:** `backend/agents/cleaner/cleaner_agent.py`
 
-A standalone LLM-based agent that runs on Supabase-stored incidents. Processes one incident per invocation.
+Rewrites raw community text into a clean, formal summary. Runs one incident at a time.
 
-**Pydantic output schema — `CleanedIncident`:**
+**What GPT-4o-mini produces:**
 
 | Field | Type | Description |
 |---|---|---|
-| `cleaned_content` | `str` | Formal 1–2 sentence summary, slang and handles removed |
-| `topic_bucket` | `Literal` | `singapore_news`, `singapore_viral`, or `other` |
-| `location_text` | `str?` | Normalised place name (e.g. "Ang Mo Kio MRT") |
-| `latitude` | `float?` | Approximate latitude (Singapore bounds: 1.1–1.5) |
-| `longitude` | `float?` | Approximate longitude (Singapore bounds: 103.6–104.1) |
-| `normalized_time` | `str?` | ISO-8601 timestamp in SGT (e.g. `2026-04-23T20:00:00+08:00`) |
+| `cleaned_content` | string | Formal 1–2 sentence summary, no slang or handles |
+| `topic_bucket` | string | `singapore_news`, `singapore_viral`, or `other` |
+| `location_text` | string? | Normalised place name (e.g. "Ang Mo Kio MRT") |
+| `latitude` | float? | Approx GPS latitude (Singapore: 1.1–1.5) |
+| `longitude` | float? | Approx GPS longitude (Singapore: 103.6–104.1) |
+| `normalized_time` | string? | ISO-8601 timestamp in Singapore time |
 
-**LLM behaviour (GPT-4o-mini, `temperature=0`):**
-- Rewrites noisy community text as a formal objective summary
-- Converts relative time phrases ("ytd", "last night") to absolute ISO-8601 using the current SGT time injected at runtime
-- Geocodes Singapore locations to approximate decimal coordinates
-- Categorises the post as news, viral, or other
+**Row locking:** Before processing, it sets the row to `in_progress`. If another process already locked it, it skips. On success it resets to `queued`. On failure it sets `failed` and logs the error.
 
-**Locking mechanism:** Before processing, the agent sets `status=in_progress` and `locked_by=cleaner_agent`. If a concurrent process already locked the record, it skips to the next candidate. On success: resets to `status=queued` for the next agent. On failure: sets `status=failed` with `last_error`.
-
-**Running:**
+**Run it:**
 
 ```bash
 python -m backend.agents.cleaner.cleaner_agent
@@ -466,133 +399,120 @@ python -m backend.agents.cleaner.cleaner_agent
 
 ### 5.4 Classifier Agent
 
-The classifier is implemented twice — a simple version in the `langchain/` package and a full version in the orchestration files.
+Two versions:
 
-#### `langchain/classifier.py` — Simple (LangGraph pipeline only)
+#### `langchain/classifier.py` — Simple version (used by the main LangGraph graph)
 
-Hardcoded keyword-based scoring. Returns scores of 0.35, 0.64, 0.66, or 0.78. **Known bug:** vandalism (0.64) and harassment (0.66) scores fall below the Decision Agent's 0.70 publish threshold, meaning those categories can never be published through this pipeline path.
+Uses hardcoded keyword scores. Known issue: vandalism (0.64) and harassment (0.66) scores fall below the 0.70 publish threshold, so those categories never get published through this path.
 
-#### `orchestration6_DB.py` / `orchestration7.py` — Full classifier
+#### `orchestration6_DB.py` / `orchestration7.py` — Full version
 
-**Step 1 — LLM field extraction:** Sends `raw_text` to GPT-4o-mini and asks for `location`, `time`, `action` (and `incident_summary` in v7) as structured JSON.
+1. GPT extracts `location`, `time`, `action` as JSON
+2. Text is embedded with `text-embedding-3-small`
+3. Cosine similarity picks the crime category
+4. A 19-feature rubric computes `authenticity_score` and `severity`
 
-**Step 2 — Vector similarity category selection:**
-- Embeds the text using `text-embedding-3-small`
-- Computes cosine similarity against pre-computed category prototype embeddings
-- Selects the category with the highest max similarity score
-- v6 has 4 categories with single prototype each; v7 has 10 categories with 3–4 prototypes each
-
-**Step 3 — Rubric-based authenticity scoring:** Sends `raw_text` + extracted fields to GPT-4o-mini with a 19-feature boolean rubric across 4 dimensions:
-
-| Dimension | Weight | Features |
-|---|---|---|
-| Detail specificity | 25% | specific_location, specific_time, specific_action, object_or_person, consequence |
-| Evidence quality | 25% | firsthand_report, clear_description, media_mentioned, source_link, follow_up_details |
-| Consistency | 15% | no_contradictions, time_location_action_align, category_matches, no_exaggeration |
-| Risk flags | −5% | rumor_language, missing_location, missing_time, ragebait, contradiction |
-
-```
-authenticity_score = (0.25 × detail) + (0.25 × evidence) + (0.15 × consistency) − (0.05 × risk)
-```
-
-**Step 4 — Severity:**
-
-```
-severity = (0.4 × detail) + (0.3 × evidence) + (0.3 × risk)
-```
+`orchestration7.py` has more category prototypes (10 categories, 3–4 examples each) for better matching.
 
 ---
 
 ### 5.5 Decision Agent
 
-Implemented as `decision_node` inside `orchestration6_DB.py` and `orchestration7.py`.
+**File:** `backend/agents/langchain/decider.py`
 
-**Inputs from state:** `category`, `authenticity_score`, `severity`, `location`, `time`, `action`, `retry_count`
+Makes the final call on each incident and saves the result to Supabase.
 
 **Logic:**
-1. If `retry_count >= 2`: force `reject` without calling LLM (hard guard)
-2. Otherwise: send incident data to GPT with instructions to return one of `publish`, `needs_retry`, `reject`
-3. If `needs_retry`: increment `retry_count`, append a feedback message to `state["messages"]` with `feedback_to: "classifier"`, route back to crawler node
-4. If `publish` or `reject`: end the graph
 
-**Decision thresholds (from the LLM prompt):**
-- Scores ≥ 0.25 with concrete location + time + action can be published
-- Community reports do not require police confirmation, media links, or corroboration
-- `needs_retry` is only used when missing information could realistically be improved
+1. If `authenticity_score >= 0.7` and `category` is known → `publish`
+2. Otherwise → `needs_revision`
+3. If `revision_count >= 2` → forced reject (no LLM call)
 
-**Note:** `orchestration7.py` contains a typo — model `"gpt-5-mini"` does not exist. This will throw a runtime error; it should be `"gpt-4o-mini"`.
+**Supabase write (new):**  
+After deciding, the agent calls `insert_incident` with:
+
+| Field | Value |
+|---|---|
+| `source_platform` | `"langgraph_pipeline"` |
+| `raw_text` | The original post text |
+| `status` | `published`, `rejected`, or `needs_revision` |
+| `decision` | The decision string |
+| `category` | From the classifier |
+| `authenticity_score` | From the classifier |
+| `agent_notes` | All notes collected through the pipeline |
+
+If the Supabase write fails, it logs the error and continues — it never crashes the pipeline.
+
+**Decision thresholds (in the full pipeline LLM prompt):**
+- Score ≥ 0.25 with concrete location + time + action → can publish
+- Community posts don't need police confirmation or media links
+- `needs_revision` only if missing info could realistically be found
 
 ---
 
 ### 5.6 LangGraph Pipeline
 
-Two complete pipeline implementations exist side by side:
+Two complete pipelines exist side by side:
 
-#### `langchain/workflow.py` — Simple pipeline (3 nodes)
-
-```
-START → crawler_node → cleaner_node → classifier_node → decision_node → END
-                                                              ↑
-                              (if needs_revision and retry_count < 2) ←──
-```
-
-Uses the simplified nodes from `langchain/`. Does not write to Supabase. For learning/demo purposes.
-
-#### `orchestration6_DB.py` / `orchestration7.py` — Full pipeline
+#### `langchain/workflow.py` — Main pipeline (wired to the API)
 
 ```
-START → crawler_node → classifier_node → decision_node → END
+START → crawler → cleaner → classifier → decider → END
                                               ↑
-                     (if needs_retry and retry_count < 2) ←──
+                      (if needs_revision and retry_count < 2) ←──
 ```
 
-Note: there is no separate cleaner node in these files — the classifier node performs both extraction and scoring.
+The compiled graph is exported as `graph`. Trigger it via the API: `POST /api/pipeline/run`.
 
-**State schema (both implementations):**
+**State fields:**
 
 | Field | Type | Set by |
 |---|---|---|
-| `incident_id` | `int` | Input |
-| `source_platform` | `str` | Crawler |
-| `source_url` | `str` | Crawler |
-| `raw_text` | `str` | Input |
-| `location` | `str?` | Classifier |
-| `time` | `str?` | Classifier |
-| `action` | `str?` | Classifier |
-| `incident_summary` | `str?` | Classifier (v7 only) |
-| `category` | `str?` | Classifier |
-| `authenticity_score` | `float?` | Classifier |
-| `severity` | `float?` | Classifier |
-| `decision` | `str?` | Decision |
-| `messages` | `list[dict]` | All agents |
-| `retry_count` | `int` | Decision |
+| `post_id` | string | Input |
+| `raw_text` | string | Input |
+| `candidate` | bool? | Crawler |
+| `category` | string? | Classifier |
+| `authenticity_score` | float? | Classifier |
+| `decision` | string? | Decider |
+| `revision_count` | int | Decider |
+| `notes` | list[string] | All nodes |
 
-**Running the standalone pipeline:**
+#### `orchestration6_DB.py` / `orchestration7.py` — Standalone pipelines
+
+```
+START → crawler → classifier → decider → END
+                                   ↑
+            (if needs_retry and retry_count < 2) ←──
+```
+
+No separate cleaner node here — the classifier does both extraction and scoring. Run directly from the command line. Does not connect to the FastAPI server.
+
+**Run them:**
 
 ```bash
-# Runs the langchain/workflow.py pipeline on a hardcoded test post
+# Simple graph — one hardcoded test post
 python -m backend.orchestration
 
-# Runs orchestration6_DB.py on data/mock_posts.json
+# Full pipeline — runs on data/mock_posts.json
 python -m backend.agents.crawler.orchestration6_DB
 ```
 
 ---
 
-### 5.7 Multimodal Verifier Utility
+### 5.7 Multimodal Verifier
 
 **File:** `backend/agents/crawler/multimodal.py`
 
-A standalone utility (not connected to the main pipeline) that verifies whether attached media files support a given post text. Uses OpenAI's vision, transcription, and chat APIs.
+Checks whether attached files (images, videos, audio, documents) actually support what a post claims. Not connected to the main pipeline — standalone utility.
 
 **Supported file types:**
 
-| Type | Extensions | Method |
+| Type | Extensions | How it checks |
 |---|---|---|
 | Images | `.png`, `.jpg`, `.jpeg`, `.webp` | GPT-4.1-mini vision |
-| Documents | `.pdf`, `.docx`, `.txt`, `.md`, `.csv`, `.json` | Text extraction + GPT summarisation |
-| Videos | `.mp4`, `.mov`, `.avi`, `.mkv`, `.webm` | Frame sampling + ffmpeg audio transcription |
-| Audio | `.mp3`, `.wav`, `.m4a`, `.ogg` | Whisper transcription + GPT summarisation |
+| Documents | `.pdf`, `.docx`, `.txt`, `.csv` | Text extraction + GPT |
+| Videos | `.mp4`, `.mov`, `.avi` | Frame sampling + audio transcription |
+| Audio | `.mp3`, `.wav`, `.m4a` | Whisper transcription + GPT |
 
 **Main function:**
 
@@ -601,23 +521,19 @@ result = verify_post_against_evidence(post_text, evidence_paths)
 # Returns: { support, confidence, reasoning, matched_claims, missing_claims, contradictions }
 ```
 
-**LangGraph node:** `multimodal_verifier_node(state)` — can be added to a graph. Skips silently if `state["evidence_paths"]` is empty.
-
 ---
 
-## 6. Database Layer
+## 6. Database
 
-All database logic lives in `backend/db/`. The package exports everything from `backend/db/__init__.py`.
+All DB code lives in `backend/db/`. Import everything from `backend.db` — not from the individual files.
 
 ### 6.1 Supabase Client
 
 **File:** `backend/db/supabase.py`
 
-Uses `@lru_cache(maxsize=1)` to create one shared client per process.
+Creates one shared client per process (cached with `@lru_cache`).
 
-Credential resolution order:
-1. `SUPABASE_SERVICE_ROLE_KEY` (preferred — bypasses Row Level Security)
-2. `SUPABASE_ANON_KEY` (fallback — subject to RLS policies)
+**Key order:** Tries `SUPABASE_SERVICE_ROLE_KEY` first (bypasses row-level security). Falls back to `SUPABASE_ANON_KEY`.
 
 ```python
 from backend.db import is_supabase_configured, get_supabase_client
@@ -630,58 +546,39 @@ if is_supabase_configured():
 
 ### 6.2 Incidents Table
 
-**File:** `backend/db/incidents.py`
-
-**Table:** `incidents`
+**File:** `backend/db/incidents.py` | **Table:** `incidents`
 
 | Column | Type | Description |
 |---|---|---|
-| `incident_id` | `uuid` | Auto-generated primary key |
-| `source_platform` | `text` | e.g. `"reddit"`, `"mock_forum"` |
-| `source_type` | `text` | e.g. `"post"` |
-| `source_item_id` | `text` | Platform-specific post ID |
-| `source_url` | `text` | Link to original post |
-| `raw_text` | `text` | Original unmodified post content |
-| `cleaned_content` | `text` | LLM-cleaned formal summary |
-| `topic_bucket` | `text` | `singapore_news`, `singapore_viral`, `other` |
-| `category` | `text` | Crime type |
-| `authenticity_score` | `float` | 0.0 (fake) → 1.0 (certain) |
-| `severity` | `float` | 0.0 (minor) → 1.0 (severe) |
-| `location_text` | `text` | Human-readable place name |
-| `latitude` | `float` | GPS latitude (Singapore: ~1.1–1.5) |
-| `longitude` | `float` | GPS longitude (Singapore: ~103.6–104.1) |
-| `timestamp_text` | `text` | Raw time phrase from post |
-| `normalized_time` | `timestamptz` | ISO-8601 in SGT |
-| `candidate_scores` | `jsonb` | Per-category keyword scores |
-| `matched_signals` | `jsonb` | Matched keyword signals |
-| `status` | `text` | See status values below |
-| `duplicate_of` | `uuid` | Foreign key to original if duplicate |
-| `decision` | `text` | Final agent decision |
-| `dedupe_key` | `text` | Unique platform deduplication key |
-| `agent_notes` | `jsonb` | Array of agent reasoning strings |
-| `locked_by` | `text` | Which agent locked this row |
-| `locked_at` | `timestamptz` | When the lock was acquired |
-| `last_error` | `text` | Error message if status=failed |
-| `available_at` | `timestamptz` | Earliest time this can be processed |
-| `created_at` | `timestamptz` | Auto-set by Supabase |
-| `updated_at` | `timestamptz` | Auto-set by Supabase |
+| `incident_id` | uuid | Auto-generated primary key |
+| `source_platform` | text | e.g. `"reddit"`, `"langgraph_pipeline"` |
+| `raw_text` | text | Original post |
+| `cleaned_content` | text | Clean summary from the Cleaner Agent |
+| `category` | text | Crime type |
+| `authenticity_score` | float | 0.0 (probably fake) → 1.0 (very likely real) |
+| `severity` | float | 0.0 (minor) → 1.0 (serious) |
+| `location_text` | text | Place name (e.g. "Bedok MRT") |
+| `latitude` | float | GPS latitude |
+| `longitude` | float | GPS longitude |
+| `normalized_time` | timestamptz | ISO-8601 in Singapore time |
+| `status` | text | See status values below |
+| `decision` | text | Final agent decision |
+| `agent_notes` | jsonb | List of notes from each agent |
+| `created_at` | timestamptz | Auto-set by Supabase |
 
 **Status values:**
 
 | Status | Meaning |
 |---|---|
-| `raw` | Just ingested, not processed |
+| `raw` | Just saved, not processed yet |
 | `queued` | Ready for the next agent |
-| `in_progress` | Currently locked by an agent |
+| `in_progress` | An agent is working on it right now |
 | `candidate` | Crawler approved it |
-| `classified` | Classifier scored it |
-| `published` | Approved — visible on the map |
-| `rejected` | Rejected — not shown |
-| `rejected_duplicate` | Duplicate of an earlier post |
-| `merged` | Combined into another incident |
-| `needs_revision` | Sent back for more information |
-| `needs_context` | Has a crime signal but no location or time |
-| `failed` | Agent encountered an error |
+| `classified` | Classifier has scored it |
+| `published` | Approved — shows on the map |
+| `rejected` | Not good enough — not shown |
+| `needs_revision` | Sent back for more info |
+| `failed` | An agent hit an error |
 
 **Available functions:**
 
@@ -690,7 +587,6 @@ insert_incident(data: dict) -> dict
 get_incident_by_id(incident_id: str) -> dict | None
 get_all_incidents(status_filter=None, limit=50) -> list[dict]
 get_published_incidents(limit=100) -> list[dict]
-get_candidate_incidents(limit=100) -> list[dict]
 update_incident(incident_id: str, updates: dict) -> dict
 update_incident_status(incident_id: str, new_status: str) -> dict
 append_agent_note(incident_id: str, note: str, existing_notes: list) -> dict
@@ -700,26 +596,24 @@ append_agent_note(incident_id: str, note: str, existing_notes: list) -> dict
 
 ### 6.3 Agent Feedback Table
 
-**File:** `backend/db/feedback.py`
+**File:** `backend/db/feedback.py` | **Table:** `agent_feedback`
 
-**Table:** `agent_feedback`
+Stores messages that agents send to each other when they need more info.
 
 | Column | Type | Description |
 |---|---|---|
-| `id` | `uuid` | Auto-generated primary key |
-| `incident_id` | `uuid` | Which incident this feedback is about |
-| `from_agent` | `text` | Sender: `"crawler"`, `"classifier"`, `"decision_agent"` |
-| `to_agent` | `text` | Recipient: `"crawler"`, `"classifier"`, `"decision_agent"` |
-| `feedback_type` | `text` | Short code: `location_unclear`, `time_missing`, etc. |
-| `reason` | `text` | Human-readable explanation |
-| `requested_action` | `text` | Specific instruction for the recipient |
-| `priority` | `text` | `"low"`, `"medium"`, `"high"` |
-| `resolved` | `boolean` | Has this been acted on? Default `false` |
-| `created_at` | `timestamptz` | Auto-set by Supabase |
+| `id` | uuid | Auto-generated |
+| `incident_id` | uuid | Which incident this is about |
+| `from_agent` | text | Who sent it (`"classifier"`, `"decision_agent"`, etc.) |
+| `to_agent` | text | Who should read it |
+| `feedback_type` | text | Short code (e.g. `"location_unclear"`) |
+| `reason` | text | Why this feedback was sent |
+| `requested_action` | text | What the receiving agent should do |
+| `priority` | text | `"low"`, `"medium"`, or `"high"` |
+| `resolved` | boolean | Has the receiving agent acted on it? |
 
-**Feedback type codes:**
-
-`location_unclear`, `time_missing`, `source_weak`, `text_too_vague`, `possible_duplicate`, `authenticity_too_low`, `category_conflict`, `severity_unclear`, `source_metadata_missing`
+**Feedback type codes:**  
+`location_unclear` · `time_missing` · `source_weak` · `text_too_vague` · `possible_duplicate` · `authenticity_too_low` · `category_conflict` · `severity_unclear` · `source_metadata_missing`
 
 **Available functions:**
 
@@ -727,58 +621,48 @@ append_agent_note(incident_id: str, note: str, existing_notes: list) -> dict
 insert_feedback(data: dict) -> dict
 get_feedback_for_incident(incident_id: str) -> list[dict]
 get_unresolved_feedback(to_agent: str | None = None) -> list[dict]
-get_all_feedback(limit=100) -> list[dict]
 mark_feedback_resolved(feedback_id: str) -> dict
-resolve_all_feedback_for_incident(incident_id: str) -> list[dict]
 ```
 
 ---
 
 ### 6.4 Mock Official Reports Table
 
-**File:** `backend/db/mock_reports.py`
+**File:** `backend/db/mock_reports.py` | **Table:** `mock_official_reports`
 
-**Table:** `mock_official_reports`
-
-Stands in for real Singapore Police Force, CNA, and Straits Times records. Used by the Classifier Agent to check whether a community post duplicates an already-officially-reported incident.
+Stands in for real SPF / CNA / Straits Times records. The classifier checks these to avoid publishing incidents that are already officially reported.
 
 | Column | Type | Description |
 |---|---|---|
-| `id` | `uuid` | Auto-generated primary key |
-| `title` | `text` | Short headline |
-| `description` | `text` | Full description |
-| `category` | `text` | Crime type |
-| `location_text` | `text` | Human-readable location |
-| `latitude` | `float` | GPS latitude |
-| `longitude` | `float` | GPS longitude |
-| `reported_at` | `timestamptz` | When officially reported |
-| `source` | `text` | `"SPF"`, `"CNA"`, `"Straits Times"` |
+| `id` | uuid | Auto-generated |
+| `title` | text | Short headline |
+| `description` | text | Full description |
+| `category` | text | Crime type |
+| `location_text` | text | Place name |
+| `latitude` / `longitude` | float | Coordinates |
+| `source` | text | `"SPF"`, `"CNA"`, `"Straits Times"` |
 
 **Available functions:**
 
 ```python
 get_all_mock_reports() -> list[dict]
 find_similar_official_report(category: str, location_text: str) -> dict | None
-get_reports_by_category(category: str) -> list[dict]
 insert_mock_report(data: dict) -> dict
 seed_mock_reports(reports: list[dict]) -> list[dict]
 ```
-
-`find_similar_official_report` matches on exact `category` + case-insensitive partial `location_text`. Known limitation: will miss the same location described with different wording (e.g. "Bedok" vs "East Coast").
 
 ---
 
 ## 7. API Reference
 
-Base URL (development): `http://127.0.0.1:8000`
+Base URL (local): `http://127.0.0.1:8000`
 
 ---
 
 ### `GET /`
 
-Returns API version info and database connection status.
+Returns API version info and whether the database is connected.
 
-**Response:**
 ```json
 {
   "message": "PettyCrimeSG API is running.",
@@ -791,9 +675,6 @@ Returns API version info and database connection status.
 
 ### `GET /health`
 
-Health check.
-
-**Response:**
 ```json
 { "status": "ok", "database": "connected" }
 ```
@@ -802,28 +683,18 @@ Health check.
 
 ### `GET /api/incidents`
 
-Processes `data/sample_posts.json` through the deterministic crawler in memory and returns the results. Does not use the database.
+Runs the deterministic crawler on `data/sample_posts.json` in memory. No database needed. Good for local testing.
 
 **Query params:** `candidate_only=true`, `limit=50`
-
-**Response:**
-```json
-{
-  "count": 12,
-  "source": "json_file",
-  "incidents": [...]
-}
-```
 
 ---
 
 ### `GET /api/db/incidents`
 
-Reads incidents from Supabase. Primary endpoint for the frontend map.
+Gets incidents from Supabase. This is what the frontend map calls.
 
 **Query params:** `status=published`, `published_only=true`, `limit=50`
 
-**Response:**
 ```json
 {
   "count": 8,
@@ -836,21 +707,18 @@ Reads incidents from Supabase. Primary endpoint for the frontend map.
 
 ### `GET /api/db/incidents/{incident_id}`
 
-Returns a single incident by its UUID.
-
-**404** if not found.
+Gets one incident by UUID. Returns 404 if not found.
 
 ---
 
 ### `GET /api/db/incidents/{incident_id}/feedback`
 
-Returns the complete agent conversation log for an incident.
+Gets the full agent conversation log for one incident.
 
-**Response:**
 ```json
 {
   "incident_id": "...",
-  "count": 3,
+  "count": 2,
   "feedback": [
     {
       "from_agent": "classifier",
@@ -869,34 +737,57 @@ Returns the complete agent conversation log for an incident.
 
 ### `POST /api/db/incidents`
 
-Saves a new incident. Called by the Crawler Agent.
-
-**Required body fields:** `source_platform`, `raw_text`, `status`
-
-**Response:**
-```json
-{ "message": "Incident saved successfully.", "incident": {...} }
-```
+Saves a new incident. Required body fields: `source_platform`, `raw_text`, `status`.
 
 ---
 
 ### `POST /api/db/incidents/{incident_id}/feedback`
 
-Sends an agent-to-agent feedback message.
-
-**Required body fields:** `from_agent`, `to_agent`, `feedback_type`, `reason`, `requested_action`, `priority`
+Sends an agent-to-agent feedback message. Required: `from_agent`, `to_agent`, `feedback_type`, `reason`, `requested_action`, `priority`.
 
 ---
 
 ### `GET /api/db/official-reports`
 
-Returns all mock official reports. **Query param:** `limit=100`
+Gets all mock official reports. Query param: `limit=100`.
+
+---
+
+### `POST /api/pipeline/run`
+
+Runs the LangGraph pipeline on a list of posts. Posts go through the full graph one at a time.
+
+**Request body:**
+```json
+{
+  "posts": [
+    { "post_id": "abc", "raw_text": "Bag stolen at Bedok MRT last night." }
+  ]
+}
+```
+
+**Response:**
+```json
+{
+  "results": [
+    {
+      "post_id": "abc",
+      "decision": "publish",
+      "category": "theft",
+      "authenticity_score": 0.78,
+      "status": "published"
+    }
+  ]
+}
+```
+
+If the pipeline fails on a single post, that entry gets an `"error"` field instead. The rest of the posts still run.
 
 ---
 
 ## 8. Frontend
 
-**Tech stack:** Next.js 16 (App Router), TypeScript, Tailwind CSS v4, React-Leaflet, Zustand, Framer Motion
+**Stack:** Next.js 16 (App Router), TypeScript, Tailwind CSS v4, React-Leaflet, Zustand, Framer Motion
 
 **Start:**
 ```bash
@@ -907,54 +798,53 @@ npm run dev   # → http://localhost:3000
 
 ---
 
-### 8.1 Application Shell
+### 8.1 App Shell
 
-**`app/page.tsx`** → renders `<Dashboard />`  
-**`app/layout.tsx`** → sets metadata, applies global CSS  
-**`app/globals.css`** → Tailwind base styles + custom `safewatch-*` CSS classes for glass panels, pin animations, and map overlays
+- `app/page.tsx` → renders `<Dashboard />`
+- `app/layout.tsx` → sets page metadata and global CSS
+- `app/globals.css` → Tailwind base + custom CSS classes for glass panels, pin animations, and map overlays
 
 ---
 
-### 8.2 Zustand Store
+### 8.2 Store (Zustand)
 
 **File:** `src/components/safewatch/store.ts`
 
-Single source of truth for all UI state. Key slices:
+Single source of truth for all UI state.
 
-| State field | Type | Description |
+| Field | Type | Description |
 |---|---|---|
-| `incidents` | `Incident[]` | Current incident list (starts with mock data) |
-| `clusters` | `Cluster[]` | Cluster metadata |
-| `selectedIncidentId` | `string?` | ID of the open detail panel |
+| `incidents` | `Incident[]` | Current incident list (starts as mock data) |
+| `selectedIncidentId` | `string?` | Which incident is open in the detail panel |
 | `crimeType` | `CrimeTypeFilter` | Active crime type filter |
-| `timeRange` | `TimeRangeFilter` | Active time window (`24h`, `7d`, `30d`, `90d`) |
+| `timeRange` | `TimeRangeFilter` | `24h`, `7d`, `30d`, or `90d` |
 | `severityFilter` | `SeverityFilter` | Severity display mode |
-| `mapFlyTo` | `object?` | Coordinates to animate the map to |
-| `sidebarCollapsed` | `bool` | Sidebar open/closed |
-| `isLoading` | `bool` | API fetch in progress |
+| `mapFlyTo` | `object?` | Coords to animate the map to |
+| `sidebarCollapsed` | `bool` | Sidebar open or closed |
+| `isLoading` | `bool` | API call in progress |
 
-**`fetchIncidents()`:** Calls `GET /api/db/incidents?published_only=true&limit=200`. If the API returns data, replaces mock incidents with real database rows (mapped via `mapDbIncidentToFrontend`). Falls back to mock data silently if the API is unreachable or returns zero rows.
+**`fetchIncidents()`** calls `GET /api/db/incidents?published_only=true&limit=200`. If the API returns real data, it replaces the mock incidents. If the API fails or returns zero rows, mock data stays.
 
-**Database → frontend field mapping:**
+**How database rows map to frontend fields:**
 
 | DB column | Frontend field | Notes |
 |---|---|---|
 | `incident_id` | `id` | |
 | `authenticity_score` | `confidence` | |
-| `authenticity_score ≥ 0.8` | `verified` | |
+| `authenticity_score >= 0.8` | `verified` | True/false badge |
 | `raw_text` | `description` | |
 | `location_text` | `location.area` | |
-| `latitude` | `location.lat` | Defaults to `1.3521` |
-| `longitude` | `location.lng` | Defaults to `103.8198` |
+| `latitude` | `location.lat` | Defaults to `1.3521` if missing |
+| `longitude` | `location.lng` | Defaults to `103.8198` if missing |
 | `normalized_time` | `timestamp` | |
-| `severity float` | `severity string` | `≥0.9` → critical, `≥0.7` → high, `≥0.5` → medium, else → low |
+| `severity` (float) | `severity` (string) | `≥0.9`=critical, `≥0.7`=high, `≥0.5`=medium, else=low |
 
-**Selector hooks:**
+**Helper functions:**
 
 ```typescript
-useFilteredIncidents()  // applies crimeType + timeRange filters
-severityCounts(incidents)  // returns { critical, high, medium, low } counts
-timeAgo(isoString)  // returns "5 min ago", "2 hrs ago", "3 days ago"
+useFilteredIncidents()   // applies crimeType + timeRange filters
+severityCounts(incidents) // returns { critical, high, medium, low }
+timeAgo(isoString)        // returns "5 min ago", "2 hrs ago", "3 days ago"
 ```
 
 ---
@@ -963,11 +853,11 @@ timeAgo(isoString)  // returns "5 min ago", "2 hrs ago", "3 days ago"
 
 **File:** `src/components/safewatch/MapView.tsx`
 
-Built on React-Leaflet. Locked to Singapore's bounding box (`[1.16, 103.6]` → `[1.48, 104.1]`). Zoom range: 12–18.
+Built on React-Leaflet. Locked to Singapore's bounding box (`[1.16, 103.6]` → `[1.48, 104.1]`). Zoom: 12–18.
 
-**Area aggregation:** Incidents are grouped by Singapore planning area. Each area gets one heat-density pin instead of individual markers. GeoJSON data for all planning areas is loaded lazily from `/data/sg-planning-areas.geojson`.
+Incidents are grouped by planning area. Each area gets one pin instead of individual markers. Area polygons come from `/data/sg-planning-areas.geojson`.
 
-**Pin heat levels:**
+**Pin colours by incident count:**
 
 | Count | Colour | Hex |
 |---|---|---|
@@ -977,13 +867,12 @@ Built on React-Leaflet. Locked to Singapore's bounding box (`[1.16, 103.6]` → 
 | 7–9 | Red-orange | `#ef4444` |
 | 10+ | Deep red | `#b91c1c` |
 
-**Interaction:**
-- Hover a pin → tooltip shows up to 5 incidents in that area
-- Click a pin → popup shows the full area incident list; clicking an incident opens the detail panel and flies the map to that area
-- Incidents that don't match any planning area get a fallback pushpin at their raw `lat/lng`
+- **Hover** a pin → tooltip shows up to 5 incidents in that area
+- **Click** a pin → popup with the full list; clicking an incident opens the detail panel
+- Incidents with no matching area get a fallback pin at their raw `lat/lng`
 
-**Map styles** (switchable in-app):
-- Voyager (default light)
+**Map styles** (switchable in the app):
+- Voyager (default, light)
 - Dark Matter
 - Positron
 - Satellite (ArcGIS)
@@ -994,11 +883,11 @@ Built on React-Leaflet. Locked to Singapore's bounding box (`[1.16, 103.6]` → 
 
 **File:** `src/components/safewatch/IncidentDetailPanel.tsx`
 
-Slides in from the right when an incident is selected. Displays:
+Slides in from the right when you click an incident. Shows:
 - Title, severity badge, verified status
 - Location, timestamp, source
 - Full description
-- Agent analysis: classification confidence, validation status, severity reason, pattern notes
+- Agent analysis: classification confidence, validation, severity reason, pattern notes
 
 ---
 
@@ -1010,7 +899,7 @@ Collapsible panel (collapsed on mobile by default). Contains:
 - Crime type filter buttons
 - Time range filter buttons
 - Severity count summary
-- Scrollable incident list with severity colour indicators
+- Scrollable incident list with colour indicators
 
 ---
 
@@ -1018,40 +907,42 @@ Collapsible panel (collapsed on mobile by default). Contains:
 
 **File:** `src/components/safewatch/mockData.ts`
 
-55 hardcoded incidents across 15+ Singapore planning areas. Used as the initial state when the store loads, and as fallback if the backend is unreachable. Includes 3 hardcoded clusters:
+55 hardcoded incidents across 15+ Singapore planning areas. Used as the starting state and as a fallback if the backend is unreachable.
 
-| Cluster | Type | Area | Incidents |
+3 hardcoded clusters:
+
+| Cluster | Type | Area | Count |
 |---|---|---|---|
 | `CL_023` | Snatch Theft | Geylang | 5 |
 | `CL_019` | Bike Theft | Tampines MRT | 4 |
 | `CL_031` | Voyeurism | Yishun Block 743 | 3 |
 
-**Severity colour constants:**
+**Severity colours:**
 ```
-critical → #ef4444 (red)
-high     → #f97316 (orange)
-medium   → #eab308 (yellow)
-low      → #22c55e (green)
+critical → #ef4444  (red)
+high     → #f97316  (orange)
+medium   → #eab308  (yellow)
+low      → #22c55e  (green)
 ```
 
 ---
 
-## 9. Shared Data Schemas
+## 9. Data Schemas
 
 ### Frontend `Incident` type
 
 ```typescript
 interface Incident {
   id: string;
-  type: string;                    // crime category
+  type: string;
   severity: "critical" | "high" | "medium" | "low";
   title: string;
   description: string;
   location: { area: string; lat: number; lng: number };
   source: string;
-  verified: boolean;               // confidence >= 0.8
-  confidence: number;              // 0.0–1.0
-  timestamp: string;               // ISO-8601
+  verified: boolean;
+  confidence: number;
+  timestamp: string;
   cluster_id: string | null;
   agent_analysis: {
     classification: string;
@@ -1072,7 +963,7 @@ class CleanedIncident(BaseModel):
     location_text: Optional[str]
     latitude: Optional[float]   # 1.1–1.5
     longitude: Optional[float]  # 103.6–104.1
-    normalized_time: Optional[str]  # ISO-8601 SGT
+    normalized_time: Optional[str]  # ISO-8601 Singapore time
 ```
 
 ### LangGraph `IncidentState` (TypedDict)
@@ -1091,53 +982,54 @@ class IncidentState(TypedDict):
 
 ---
 
-## 10. Feedback Loop System
+## 10. Agent Feedback Loop
 
-The system supports three agent-to-agent feedback channels:
+Three feedback channels exist:
 
 ```
-Classifier → Crawler      (e.g. "location unclear, find more details")
-Decision   → Classifier   (e.g. "re-evaluate ambiguous category scores")
-Decision   → Crawler      (e.g. "source metadata missing")
+Classifier → Crawler      ("location unclear, find more details")
+Decision   → Classifier   ("re-score this ambiguous incident")
+Decision   → Crawler      ("source metadata is missing")
 ```
 
-**In the orchestration pipelines** (`orchestration6_DB.py`, `orchestration7.py`): feedback messages are stored in `state["messages"]` as in-memory dicts with a `feedback_to` field. The receiving agent reads them at the start of its node.
+**Inside the orchestration pipelines:** Feedback is stored in `state["messages"]` as in-memory dicts with a `feedback_to` field.
 
-**In Supabase** (`db/feedback.py`): feedback is persisted to the `agent_feedback` table. Agents can poll `get_unresolved_feedback(to_agent="crawler")` to check their inbox and call `mark_feedback_resolved(feedback_id)` when done.
+**In Supabase:** Feedback is saved to `agent_feedback`. Agents call `get_unresolved_feedback(to_agent="crawler")` to check their inbox, then `mark_feedback_resolved(feedback_id)` when done.
 
-**Via API** (`POST /api/db/incidents/{id}/feedback`): any component can send feedback to any agent through the REST API.
+**Via the API:** Any component can send feedback through `POST /api/db/incidents/{id}/feedback`.
 
-**Revision limit:** Maximum 2 retry cycles per incident. After 2 retries the decision node forces `reject` without calling the LLM.
+**Retry limit:** Max 2 retries per incident. After that, the decision node forces a reject.
 
 ---
 
 ## 11. Environment Variables
 
-Copy `.env.example` to `.env` and fill in your values.
+Copy `.env.example` to `.env` and fill in the values.
 
-**Backend (`.env` in project root):**
+**Backend:**
 
 | Variable | Required | Description |
 |---|---|---|
-| `OPENAI_API_KEY` | Yes | OpenAI API key (used by all LLM agents) |
+| `OPENAI_API_KEY` | Yes | Used by all LLM agents |
 | `SUPABASE_URL` | Yes (for DB) | Your Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes (for DB) | Service role key (backend only) |
-| `SUPABASE_ANON_KEY` | Optional | Anon key (fallback if service role missing) |
-| `SUPABASE_KEY` | Yes (for crawler) | Used specifically by `reddit_crawler.py` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes (for DB) | Service role key — bypasses row-level security |
+| `SUPABASE_ANON_KEY` | Optional | Fallback if service role key is missing |
+| `SUPABASE_KEY` | Yes (for crawler) | Used by `reddit_crawler.py` specifically |
 | `REDDIT_USER_AGENT` | Optional | Custom User-Agent for Reddit requests |
+| `HUGGINGFACEHUB_API_TOKEN` | Optional | Used by the Reddit crawler's classifier model |
 
-Without `SUPABASE_URL` and a key, the backend falls back to reading from `data/sample_posts.json` and the map shows mock data.
+Without `SUPABASE_URL` and a key, the backend falls back to `data/sample_posts.json` and the map shows mock data.
 
-**Frontend — Vercel / production (must use `NEXT_PUBLIC_` prefix):**
+**Frontend — Vercel / production:**
 
-Next.js only exposes environment variables to the browser bundle when they are prefixed with `NEXT_PUBLIC_`. The backend variables (`SUPABASE_URL`, `SUPABASE_ANON_KEY`) are **not** accessible client-side. Add these separately in Vercel → Settings → Environment Variables:
+Next.js only passes variables to the browser if they start with `NEXT_PUBLIC_`. The backend variables above are server-only. Add these separately in **Vercel → Settings → Environment Variables**:
 
 | Variable | Required | Description |
 |---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL (same value as `SUPABASE_URL`) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Supabase anon/public key (same value as `SUPABASE_ANON_KEY`) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Same value as `SUPABASE_URL` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Same value as `SUPABASE_ANON_KEY` |
 
-Without these, the frontend throws `supabaseUrl is required` at runtime and the page fails to load. These are read by `frontend/src/lib/supabase.ts`.
+Without these, the frontend throws `supabaseUrl is required` at runtime and the page won't load. They are read by `frontend/src/lib/supabase.ts`.
 
 ---
 
@@ -1158,7 +1050,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Start the API server (run from `HORNY_APPLE/`):
+Start the API (run from `HORNY_APPLE/`):
 
 ```bash
 python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
@@ -1175,13 +1067,13 @@ npm run dev   # → http://localhost:3000
 ### Run agents manually
 
 ```bash
-# Deterministic crawler — writes to data/incident_drafts.json
+# Keyword crawler — writes to data/incident_drafts.json
 python -m backend.agents.crawler.deterministic
 
-# Reddit crawler — scrape + save to Supabase
+# Reddit crawler — scrape and save to Supabase
 python -m backend.agents.crawler.reddit_crawler --upload --stats
 
-# Cleaner agent — process one queued Supabase incident
+# Cleaner agent — process one queued incident from Supabase
 python -m backend.agents.cleaner.cleaner_agent
 
 # Simple LangGraph pipeline — one hardcoded test post
@@ -1191,42 +1083,52 @@ python -m backend.orchestration
 python -m backend.agents.crawler.orchestration6_DB
 ```
 
+### Run the pipeline via the API
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/pipeline/run \
+  -H "Content-Type: application/json" \
+  -d '{
+    "posts": [
+      { "post_id": "test_001", "raw_text": "Bag stolen at Bedok MRT last night." }
+    ]
+  }'
+```
+
 ### Database setup
 
-Before running with a real database:
-
 1. Create a Supabase project
-2. Run `upgrade_migration.sql` in the Supabase SQL editor to create all tables
-3. Run `seed_incidents.sql` to populate test data
+2. Run `upgrade_migration.sql` in the Supabase SQL editor to create the tables
+3. Run `seed_incidents.sql` to add test data
 4. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`
 
 ---
 
-## 13. Known Limitations and Bugs
+## 13. Known Issues
 
-| # | Severity | Location | Description |
+| # | Severity | File | Description |
 |---|---|---|---|
-| 1 | **Critical** | `langchain/classifier.py:17-18` | Vandalism (0.64) and harassment (0.66) scores are hardcoded below the 0.70 publish threshold in `decider.py`. These categories can never be published through the LangGraph pipeline path. |
-| 2 | **Critical** | `orchestration7.py:570` | Decision node calls `model="gpt-5-mini"` which does not exist. Will throw a runtime API error. Should be `"gpt-4o-mini"`. |
-| 3 | **High** | All orchestration pipelines | Pipeline does not write decisions back to Supabase. Published incidents never appear on the live map unless saved separately. |
-| 4 | **High** | `langchain/workflow.py` | Not wired to FastAPI. There is no API endpoint to trigger the LangGraph pipeline. It can only be run as a standalone script. |
-| 5 | **High** | `deterministic.py:308-309` | Crawler always sets `latitude: None`, `longitude: None`. Geocoding only happens if the Cleaner Agent runs separately afterwards. |
-| 6 | **Medium** | `langchain/cleaner.py` | The LangGraph pipeline's cleaner node only does whitespace normalization. It does not set `location_text` or `normalized_time` on `IncidentState`, and those fields don't exist in the TypedDict. |
-| 7 | **Medium** | `orchestration6_DB.py` | Classifier LLM calls do not set `temperature=0`, so results are non-deterministic across runs. |
-| 8 | **Low** | `frontend/store.ts` | The map always starts with mock data on first load, even when the backend is available. `fetchIncidents()` is called on mount but there is a brief flash of mock data. |
-| 10 | ~~**Fixed**~~ | `frontend/store.ts:207` | ~~TypeScript error: `data as DbRow[]` failed type check because Supabase may return `GenericStringError[]`. Fixed by casting through `unknown` first: `data as unknown as DbRow[]`.~~ |
-| 9 | **Low** | `db/mock_reports.py` | `find_similar_official_report` uses simple string matching and will miss semantically equivalent locations described with different wording. |
+| 1 | **High** | `langchain/classifier.py` | Vandalism (0.64) and harassment (0.66) scores are hardcoded below the 0.70 publish threshold. These categories can never be published through the `langchain/` pipeline path. |
+| 2 | **High** | All orchestration pipelines | The standalone pipelines (`orchestration6_DB.py`, `orchestration7.py`) do not write decisions back to Supabase themselves — only the `langchain/decider.py` path does (via `POST /api/pipeline/run`). |
+| 3 | **High** | `langchain/workflow.py` | Not wired to a trigger. The only way to run the graph is via `POST /api/pipeline/run` or the `__main__` block in `workflow.py`. |
+| 4 | **Medium** | `deterministic.py` | Crawler always sets `latitude: None` and `longitude: None`. Geocoding only happens if the Cleaner Agent runs separately. |
+| 5 | **Medium** | `langchain/cleaner.py` | The graph's cleaner node only strips whitespace. It does not fill in `location_text` or `normalized_time` — those fields don't even exist in `IncidentState`. |
+| 6 | **Medium** | `orchestration6_DB.py` | Classifier LLM calls do not set `temperature=0`, so results vary between runs. |
+| 7 | **Low** | `frontend/store.ts` | The map always flashes mock data on first load before the real data arrives, even when the backend is available. |
+| 8 | **Low** | `db/mock_reports.py` | `find_similar_official_report` uses simple string matching. It misses the same location if described differently (e.g. "Bedok" vs "East Coast"). |
+| ~~9~~ | ~~Fixed~~ | ~~`orchestration7.py:571`~~ | ~~Decision node called `model="gpt-5-mini"` which doesn't exist.~~ Fixed — now `"gpt-4o-mini"`. |
+| ~~10~~ | ~~Fixed~~ | ~~`frontend/store.ts:207`~~ | ~~TypeScript error: `data as DbRow[]` failed type check.~~ Fixed — now `data as unknown as DbRow[]`. |
 
 ---
 
-## 14. Ethics and Safety Rules
+## 14. Ethics Rules
 
 All agents follow these rules, enforced via LLM system prompts:
 
-1. **Posts are unverified reports, not confirmed crimes.** The system never asserts guilt or confirms a crime occurred.
-2. **Confidence scores are always shown.** No incident is displayed without its `authenticity_score`.
-3. **No personal information is published.** Names, faces, usernames, phone numbers, and personal details are stripped by the Cleaner Agent.
-4. **Only generalised summaries are published.** The `cleaned_content` field is the only text shown publicly — the raw post text is stored but not displayed.
-5. **Low-confidence reports are held or rejected.** Incidents below the authenticity threshold go to `needs_revision` or `rejected`, not directly to the map.
-6. **Maximum 2 revision cycles.** After 2 retries, an uncertain incident is rejected rather than amplified.
+1. **Posts are unverified reports, not confirmed crimes.** The system never says someone is guilty.
+2. **Confidence scores are always shown.** No incident goes on the map without its `authenticity_score`.
+3. **No personal info is published.** Names, usernames, phone numbers, and personal details are removed by the Cleaner Agent.
+4. **Only clean summaries are shown publicly.** The raw post text is stored but never displayed to end users.
+5. **Low-confidence reports are held or rejected.** Posts below the threshold go to `needs_revision` or `rejected` — not the map.
+6. **Max 2 retries.** After 2 revision cycles, an uncertain incident is rejected rather than kept alive.
 7. **The map shows patterns, not accusations.** Pins represent community reports, not police records.
