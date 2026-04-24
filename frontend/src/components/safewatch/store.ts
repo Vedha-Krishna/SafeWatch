@@ -204,7 +204,7 @@ export const useStore = create<SafeWatchState>((set) => ({
       return;
     }
 
-    const incidents = (data as DbRow[]).map(rowToIncident);
+    const incidents = (data as unknown as DbRow[]).map(rowToIncident);
 
     if (incidents.length > 0) {
       console.log(`Loaded ${incidents.length} incidents from Supabase.`);
