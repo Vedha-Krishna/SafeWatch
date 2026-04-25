@@ -98,7 +98,7 @@ export default function SeveritySidebar() {
       {!collapsed && (
         <>
           {/* Filter chips */}
-          <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto sm:flex-wrap safewatch-scroll">
+          <div className="flex flex-nowrap items-center gap-1 px-3 pb-3 overflow-x-auto safewatch-scroll">
             {(
               [
                 ["all",           "All",      mappedLocationCount],
@@ -108,7 +108,7 @@ export default function SeveritySidebar() {
               <button
                 key={v}
                 onClick={() => setSeverityFilter(v)}
-                className={`h-8 text-[10px] font-mono uppercase px-3 rounded-full transition-colors whitespace-nowrap ${
+                className={`h-8 shrink-0 text-[10px] font-mono uppercase px-2.5 rounded-full transition-colors whitespace-nowrap ${
                   severityFilter === v
                     ? "bg-white/12 text-blue-100 border border-blue-300/25"
                     : "bg-transparent text-slate-300 hover:text-blue-200"
@@ -128,7 +128,7 @@ export default function SeveritySidebar() {
             {/* No Location chip — amber accent */}
             <button
               onClick={() => setSeverityFilter("no_location")}
-              className={`h-8 flex items-center gap-1 text-[10px] font-mono uppercase px-3 rounded-full transition-colors whitespace-nowrap ${
+              className={`h-8 shrink-0 flex items-center gap-1 text-[10px] font-mono uppercase px-2.5 rounded-full transition-colors whitespace-nowrap ${
                 severityFilter === "no_location"
                   ? "text-amber-300 bg-amber-500/20 border border-amber-500/40"
                   : "text-slate-300 hover:text-amber-300 bg-transparent"

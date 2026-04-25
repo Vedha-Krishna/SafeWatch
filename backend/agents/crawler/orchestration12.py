@@ -10,9 +10,7 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-# =========================================================
-# 1. CATEGORY LIST + BACKWARD-COMPATIBLE SCORE MAPS
-# =========================================================
+# Category list and score maps
 VALID_CATEGORIES = [
     "theft",
     "burglary",
@@ -36,7 +34,7 @@ VALID_AUTHENTICITY = ["low", "medium", "high"]
 VALID_SEVERITY = ["low", "medium", "high"]
 VALID_DECISIONS = ["publish", "needs_retry", "reject"]
 
-# Temporary compatibility with old DB/dashboard fields.
+# Maps string labels to the numeric fields the DB and dashboard still expect.
 AUTHENTICITY_MAP = {
     "low": 0.20,
     "medium": 0.55,
@@ -69,17 +67,13 @@ CATEGORY_SCORE_MAP = {
 }
 
 
-# =========================================================
-# 2. SHARED STATE
-# =========================================================
 class State(TypedDict):
-    # Raw source fields
     incident_id: int
     source_platform: str
     source_url: str
     raw_text: str
 
-    # Cleaner fields
+    # Cleaner output
     cleaned_content: Optional[str]
     topic_bucket: Optional[str]
     location_text: Optional[str]
@@ -88,29 +82,27 @@ class State(TypedDict):
     latitude: Optional[float]
     longitude: Optional[float]
 
-    # LLM-rubric classifier fields
+    # Classifier output (rubric-based labels)
     category: Optional[str]
     authenticity_level: Optional[str]
     severity_level: Optional[str]
     classifier_reasoning: Optional[str]
 
-    # Old numeric fields kept for DB/dashboard compatibility
+    # Numeric equivalents kept for DB/dashboard compatibility
     category_score: Optional[float]
     authenticity_score: Optional[float]
     severity: Optional[float]
 
-    # Decision fields
+    # Decision output
     decision: Optional[str]
     decision_reason: Optional[str]
 
-    # Runtime fields
+    # Runtime
     messages: List[dict]
     retry_count: int
 
 
-# =========================================================
-# 3. HELPERS
-# =========================================================
+# Helpers
 def clean_json_response(raw: str) -> str:
     return raw.replace("```json", "").replace("```", "").strip()
 
@@ -159,10 +151,7 @@ def category_to_score(category: Optional[str]) -> float:
 
 
 def has_some_core_incident_signal(state: State) -> bool:
-    """
-    Softer than requiring both location and action.
-    This avoids rejecting real incidents just because extraction missed one field.
-    """
+    # Requiring both fields would reject real incidents when extraction only missed one.
     return bool(state.get("location_text")) or bool(state.get("action_text"))
 
 
@@ -176,11 +165,8 @@ def build_classifier_message(
     severity: float,
     classifier_reasoning: str,
 ) -> dict:
-    """
-    This message is intentionally redundant.
-    - structured fields are useful for DB/frontend components
-    - content/note/reasoning are useful for simple website renderers
-    """
+    # Intentionally includes both structured fields (for DB/frontend) and
+    # flattened text fields (content/note/reasoning) for simpler website renderers.
     content = (
         f"Category: {category}\n"
         f"Category Score: {category_score}\n"
@@ -194,7 +180,6 @@ def build_classifier_message(
         "type": "classification_result",
         "attempt": attempt,
 
-        # structured fields
         "category": category,
         "category_score": category_score,
         "authenticity_level": authenticity_level,
@@ -203,7 +188,6 @@ def build_classifier_message(
         "severity": severity,
         "classifier_reasoning": classifier_reasoning,
 
-        # website-friendly fallback fields
         "content": content,
         "note": (
             f"Classified as {category}. "
@@ -238,18 +222,15 @@ def build_decision_message(
         "decision_reason": decision_reason,
         "review_of_classifier": review_of_classifier,
 
-        # website-friendly fallback fields
         "content": content,
         "note": f"Decision: {decision}",
         "reasoning": review_of_classifier,
     }
 
 
-# =========================================================
-# 4. CRAWLER NODE
-# =========================================================
+# Crawler node
 def crawler_node(state: State) -> dict:
-    # This is still a mock crawler. Your real Reddit crawler can replace this.
+    # Placeholder — the real Reddit crawler feeds incidents in via process_incidents.
     state["source_platform"] = state.get("source_platform") or "mock_Reddit"
     state["source_url"] = state.get("source_url") or "mock_reddit.com"
 
@@ -265,9 +246,7 @@ def crawler_node(state: State) -> dict:
     return state
 
 
-# =========================================================
-# 5. CLASSIFIER NODE
-# =========================================================
+# Classifier node
 def classifier_node(state: State) -> dict:
     cleaned_content = state.get("cleaned_content")
     attempt = state["retry_count"] + 1
@@ -275,7 +254,7 @@ def classifier_node(state: State) -> dict:
     if not cleaned_content:
         raise ValueError("Classifier received incident without cleaned_content")
 
-    # HARD GATE: cleaner already marked it unrelated.
+    # Fast-path reject if the cleaner already flagged this as unrelated.
     if state.get("topic_bucket") == "other":
         category = "other"
         authenticity_level = "low"
@@ -382,7 +361,7 @@ Return ONLY JSON:
     severity_level = result.get("severity_level")
     classifier_reasoning = result.get("classifier_reasoning", "No reasoning provided.")
 
-    # Validation fallback
+    # Fall back to safe defaults if the LLM returned unexpected values.
     if not is_valid_category(category):
         category = "other"
 
@@ -419,13 +398,11 @@ Return ONLY JSON:
     }
 
 
-# =========================================================
-# 6. DECISION NODE
-# =========================================================
+# Decision node
 def decision_node(state: State) -> dict:
     attempt = state["retry_count"] + 1
 
-    # HARD REJECT: non-incident category.
+    # Reject immediately if classifier already said this isn't an incident.
     if state.get("category") == "other":
         decision = "reject"
         decision_reason = "Rejected because classifier categorized this as other / non-incident."
@@ -437,7 +414,7 @@ def decision_node(state: State) -> dict:
         state["messages"].append(build_decision_message(attempt, decision, instruction, decision_reason, review_of_classifier))
         return state
 
-    # SOFT HARD-GATE: reject only if cleaner found no core signal AND classifier is not confident.
+    # Reject if there's no extracted incident signal AND the classifier isn't confident.
     if not has_some_core_incident_signal(state) and state.get("authenticity_level") != "high":
         decision = "reject"
         decision_reason = (
@@ -452,7 +429,7 @@ def decision_node(state: State) -> dict:
         state["messages"].append(build_decision_message(attempt, decision, instruction, decision_reason, review_of_classifier))
         return state
 
-    # HARD RETRY LIMIT.
+    # Stop looping after two retries to avoid burning unnecessary API calls.
     if state["retry_count"] >= 2:
         decision = "reject"
         decision_reason = "Retry limit reached. Rejecting to prevent repeated classifier loops."
@@ -540,7 +517,7 @@ Return ONLY JSON:
     state["decision"] = decision
     state["decision_reason"] = decision_reason
 
-    # If retry, add explicit feedback that classifier can read on next attempt.
+    # On retry, attach feedback so the classifier can see what to fix next attempt.
     if decision == "needs_retry":
         state["retry_count"] += 1
 
@@ -569,18 +546,14 @@ Return ONLY JSON:
     return state
 
 
-# =========================================================
-# 7. CONDITIONAL EDGE ROUTER
-# =========================================================
+# Conditional edge router
 def edge_after_decision(state: State):
     if state["decision"] == "needs_retry":
         return "classifier"
     return END
 
 
-# =========================================================
-# 8. BUILD GRAPH
-# =========================================================
+# Build graph
 graph_builder = StateGraph(State)
 
 graph_builder.add_node("crawler", crawler_node)
@@ -595,9 +568,6 @@ graph_builder.add_conditional_edges("decision", edge_after_decision)
 graph = graph_builder.compile()
 
 
-# =========================================================
-# 9. PREPARE INITIAL STATE
-# =========================================================
 def prepare_initial_state(post: dict) -> State:
     return {
         "incident_id": post["incident_id"],
@@ -605,7 +575,6 @@ def prepare_initial_state(post: dict) -> State:
         "source_url": post.get("source_url", "mock_reddit.com"),
         "raw_text": post["raw_text"],
 
-        # cleaner output fields
         "cleaned_content": post.get("cleaned_content"),
         "topic_bucket": post.get("topic_bucket"),
         "location_text": post.get("location_text"),
@@ -614,39 +583,31 @@ def prepare_initial_state(post: dict) -> State:
         "longitude": post.get("longitude"),
         "normalized_time": post.get("normalized_time"),
 
-        # classifier output fields
         "category": None,
         "authenticity_level": None,
         "severity_level": None,
         "classifier_reasoning": None,
 
-        # old compatibility fields
         "category_score": None,
         "authenticity_score": None,
         "severity": None,
 
-        # decision output fields
         "decision": None,
         "decision_reason": None,
 
-        # runtime fields
         "messages": [],
         "retry_count": 0,
     }
 
 
-# =========================================================
-# 10. RUN PIPELINE
-# =========================================================
+# Entry point
 def run_pipeline_for_1_post(post: dict) -> State:
     state = prepare_initial_state(post)
     result = graph.invoke(state)
     return result
 
 
-# =========================================================
-# 11. PRINTING HELPERS
-# =========================================================
+# Console printing helpers for local runs
 def print_agent_conversation(result: dict):
     print("\nAgent Conversation:\n")
 
@@ -683,7 +644,7 @@ def print_agent_conversation(result: dict):
             print(f"   Review of Classifier: {msg.get('review_of_classifier')}\n")
 
         else:
-            # Generic fallback for website/debug compatibility.
+            # Fallback for unknown message types — grab whatever text is available.
             content = (
                 msg.get("content")
                 or msg.get("reasoning")
@@ -698,9 +659,7 @@ def print_agent_conversation(result: dict):
     print("-" * 40)
 
 
-# =========================================================
-# 12. MAIN
-# =========================================================
+# Main (local test run)
 if __name__ == "__main__":
     with open("data/mock_posts.json", "r", encoding="utf-8") as f:
         mock_posts = json.load(f)

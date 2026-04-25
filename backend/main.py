@@ -7,11 +7,9 @@ from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 try:
-    # Running as package: python -m uvicorn backend.main:app
     from .agents.crawler.deterministic import load_posts, process_posts
     from .cron_pipeline import run_safewatch_pipeline
 except ImportError:
-    # Running from backend/: python -m uvicorn main:app
     from agents.crawler.deterministic import load_posts, process_posts
     from cron_pipeline import run_safewatch_pipeline
 

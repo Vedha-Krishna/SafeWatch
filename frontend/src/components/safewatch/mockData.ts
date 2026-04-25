@@ -60,33 +60,6 @@ export const SG_CENTER: [number, number] = [1.3521, 103.8198];
 export const SG_ZOOM = 12;
 
 export const mockIncidents: Incident[] = [];
-
-// Compact factory so the data block above stays readable.
-// Auto-generates a generic 5-field agent_analysis from the basics.
-function ai(
-  id: string,
-  type: string,
-  severity: Severity,
-  title: string,
-  description: string,
-  area: string,
-  lat: number,
-  lng: number,
-  source: string,
-  verified: boolean,
-  confidence: number,
-  timestamp: string,
-  cluster_id: string | null,
-): Incident {
-  return {
-    id, type, severity, title, description,
-    location: { area, lat, lng },
-    hasMapLocation: true,
-    source, verified, confidence, timestamp, cluster_id,
-    source_url: null,
-  };
-}
-
 export const mockClusters: Cluster[] = [];
 
 export const SEVERITY_COLOR: Record<Severity, string> = {

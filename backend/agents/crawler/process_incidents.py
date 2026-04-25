@@ -5,11 +5,10 @@ from typing import Any
 from dotenv import load_dotenv
 from supabase import create_client
 
-# import pipeline function from orchestration
 try:
     from orchestration12 import run_pipeline_for_1_post
 except ImportError:
-    from orchestration12 import run_pipeline_for_1_post
+    from agents.crawler.orchestration12 import run_pipeline_for_1_post
 
 
 load_dotenv()
@@ -49,7 +48,6 @@ def db_row_to_pipeline_input(row: dict) -> dict:
         "source_url": row["source_url"],
         "raw_text": row["raw_text"],
 
-        # cleaner output
         "cleaned_content": row.get("cleaned_content"),
         "topic_bucket": row.get("topic_bucket"),
         "location_text": row.get("location_text"),
@@ -101,9 +99,6 @@ def process_queued_incidents(max_incidents: int | None = None) -> dict[str, int]
             post = db_row_to_pipeline_input(row)
             result = run_pipeline_for_1_post(post)
 
-            # =========================
-            # AI-to-AI INTERACTION LOG
-            # =========================
             print("\nAgent Conversation:\n")
 
             for msg in result["messages"]:

@@ -10,7 +10,7 @@ import {
   type AgentMessage,
 } from "./mockData";
 
-// ── Singapore location → area-center coordinates lookup ──────────────────────
+// Fallback area-center lookup when DB coordinates are missing or imprecise.
 const SG_COORDS: Record<string, [number, number]> = {
   "ang mo kio":    [1.3691, 103.8454],
   "bedok":         [1.3236, 103.9273],
@@ -56,11 +56,11 @@ function isValidNumber(value: unknown): value is number {
 }
 
 function isSingaporeCoordinate(lat: number, lng: number): boolean {
-  // Tight-enough bounding box for Singapore and nearby islands.
+  // Covers Singapore and nearby islands.
   return lat >= 1.16 && lat <= 1.48 && lng >= 103.6 && lng <= 104.1;
 }
 
-// ── Category mapping ──────────────────────────────────────────────────────────
+// Category mapping
 function normalizeCategory(cat: string | null): string {
   return (cat ?? "uncategorized")
     .trim()
@@ -86,7 +86,7 @@ function mapCategory(cat: string | null): string {
   }
 }
 
-// ── Numeric severity → enum ───────────────────────────────────────────────────
+// Numeric severity score → display enum
 function mapSeverity(score: number | null): Severity {
   if (score === null) return "medium";
   if (score >= 0.7)  return "critical";
@@ -95,7 +95,7 @@ function mapSeverity(score: number | null): Severity {
   return "low";
 }
 
-// ── DB row → Incident ─────────────────────────────────────────────────────────
+// DB row → Incident shape
 interface DbRow {
   incident_id:        string;
   source_platform:    string | null;
@@ -124,7 +124,7 @@ function validIsoTimestamp(value: string | null | undefined): string | null {
 }
 
 function rowToIncident(r: DbRow): Incident {
-  // Keep pins only for confidently Singapore locations.
+  // Only trust coordinates that fall inside Singapore's bounding box.
   const dbCoords =
     isValidNumber(r.latitude) &&
     isValidNumber(r.longitude) &&
@@ -133,8 +133,8 @@ function rowToIncident(r: DbRow): Incident {
       : null;
   const inferredCoords = getAreaCenter(r.location_text);
   const hasMapLocation = dbCoords !== null || inferredCoords !== null;
-  // Prefer text-matched Singapore coordinates so click-to-fly aligns with
-  // the displayed location name (DB coordinates can be stale or generic).
+  // Prefer the name-matched coords — they align better with the displayed area label
+  // than raw DB coordinates which can be stale or too generic.
   const [lat, lng] = inferredCoords ?? dbCoords ?? SG_CENTER;
   const area = hasMapLocation ? r.location_text ?? "Singapore" : "No location";
   const confidence = r.authenticity_score ?? 0.5;
@@ -212,23 +212,19 @@ function normalizeDecisionReason(params: {
 function extractAgentContent(m: Record<string, unknown>): string {
   const lines: string[] = [];
 
-  // Primary label (note or reasoning)
   const primary = typeof m.note === "string" ? m.note
     : typeof m.reasoning === "string" ? m.reasoning
     : typeof m.content === "string" ? m.content
     : null;
   if (primary) lines.push(primary);
 
-  // Decision explanation (shown inside decision message block)
   if (typeof m.decision_reason === "string" && m.decision_reason) {
     lines.push(m.decision_reason);
   }
 
-  // Incident summary used for vector embedding
   if (typeof m.incident_summary_used === "string" && m.incident_summary_used)
     lines.push(`used: "${m.incident_summary_used}"`);
 
-  // Top-3 candidate scores
   if (m.candidate_scores && typeof m.candidate_scores === "object") {
     const scores = m.candidate_scores as Record<string, number>;
     const top3 = Object.entries(scores)
@@ -239,7 +235,7 @@ function extractAgentContent(m: Record<string, unknown>): string {
     lines.push(`scores: ${top3}`);
   }
 
-  // Rubric features — split into ✓ / ✗ groups
+  // Split rubric features into ✓ / ✗ groups for readability.
   if (m.features && typeof m.features === "object") {
     const features = m.features as Record<string, boolean>;
     const yes = Object.entries(features).filter(([, v]) => v).map(([k]) => k.replace(/_/g, " "));
@@ -248,7 +244,6 @@ function extractAgentContent(m: Record<string, unknown>): string {
     if (no.length)  lines.push(`✗ ${no.join(", ")}`);
   }
 
-  // Extracted location / time / action
   if (m.extracted_fields && typeof m.extracted_fields === "object") {
     const f = m.extracted_fields as Record<string, unknown>;
     const parts = (["location", "time", "action"] as const)
@@ -257,11 +252,10 @@ function extractAgentContent(m: Record<string, unknown>): string {
     if (parts.length) lines.push(parts.join(" · "));
   }
 
-  // Decision feedback fields
   if (typeof m.instruction === "string" && m.instruction) lines.push(m.instruction);
   if (typeof m.reason      === "string" && m.reason)      lines.push(m.reason);
 
-  // Last-resort raw output
+  // Last-resort fallback if no standard fields were present.
   if (lines.length === 0 && typeof m.raw_output === "string" && m.raw_output)
     lines.push(m.raw_output);
 
@@ -273,8 +267,7 @@ function rowToAgentLog(r: DbRow): AgentLog {
 
   if (r.agent_messages) {
     try {
-      // agent_messages may arrive as a string (text column) or already-parsed
-      // array (jsonb column) depending on Supabase column type.
+      // agent_messages can be a JSON string (text column) or already-parsed array (jsonb).
       const parsed = typeof r.agent_messages === "string"
         ? JSON.parse(r.agent_messages)
         : r.agent_messages;
@@ -284,7 +277,7 @@ function rowToAgentLog(r: DbRow): AgentLog {
     }
   }
 
-  // Extract decision_reason from raw data before normalising messages.
+  // Pull out the decision_reason from the raw messages before we flatten them.
   const rawDecision = raw.find(
     (m) => m.agent === "decision" && typeof m.decision_reason === "string",
   );
@@ -334,7 +327,7 @@ function rowToAgentLog(r: DbRow): AgentLog {
   };
 }
 
-// ── Zustand store ─────────────────────────────────────────────────────────────
+// Zustand store
 export type CrimeTypeFilter = "all" | (string & {});
 
 export type TimeRangeFilter = "24h" | "7d" | "30d" | "90d";
@@ -425,7 +418,7 @@ export const useStore = create<SafeWatchState>((set) => ({
   },
 }));
 
-// ── Derived selectors ─────────────────────────────────────────────────────────
+// Derived selectors
 const TIME_RANGE_HOURS: Record<TimeRangeFilter, number> = {
   "24h": 24,
   "7d":  24 * 7,
