@@ -123,7 +123,30 @@ function validIsoTimestamp(value: string | null | undefined): string | null {
   return Number.isNaN(new Date(trimmed).getTime()) ? null : trimmed;
 }
 
+function normalizeLocationText(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed;
+}
+
+function isGenericLocationText(value: string): boolean {
+  const normalized = value.toLowerCase().replace(/\s+/g, " ").trim();
+  return (
+    normalized === "singapore" ||
+    normalized === "sg" ||
+    normalized === "no location" ||
+    normalized === "unknown" ||
+    normalized === "n/a" ||
+    normalized === "na"
+  );
+}
+
 function rowToIncident(r: DbRow): Incident {
+  const locationText = normalizeLocationText(r.location_text);
+  const hasSpecificLocationText =
+    locationText !== null && !isGenericLocationText(locationText);
+
   // Only trust coordinates that fall inside Singapore's bounding box.
   const dbCoords =
     isValidNumber(r.latitude) &&
@@ -131,12 +154,19 @@ function rowToIncident(r: DbRow): Incident {
     isSingaporeCoordinate(r.latitude, r.longitude)
       ? ([r.latitude, r.longitude] as [number, number])
       : null;
-  const inferredCoords = getAreaCenter(r.location_text);
-  const hasMapLocation = dbCoords !== null || inferredCoords !== null;
+  const inferredCoords = hasSpecificLocationText
+    ? getAreaCenter(locationText)
+    : null;
+  // Guardrail: if location text is missing/generic, do not show map pins even if
+  // stale/default coordinates exist in DB.
+  const hasMapLocation =
+    hasSpecificLocationText && (dbCoords !== null || inferredCoords !== null);
   // Prefer the name-matched coords — they align better with the displayed area label
   // than raw DB coordinates which can be stale or too generic.
-  const [lat, lng] = inferredCoords ?? dbCoords ?? SG_CENTER;
-  const area = hasMapLocation ? r.location_text ?? "Singapore" : "No location";
+  const [lat, lng] = hasMapLocation
+    ? (inferredCoords ?? dbCoords ?? SG_CENTER)
+    : SG_CENTER;
+  const area = hasMapLocation ? locationText! : "No location";
   const confidence = r.authenticity_score ?? 0.5;
   const description = r.cleaned_content || r.raw_text || "";
   const categoryLabel = r.category

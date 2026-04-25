@@ -10,7 +10,9 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-# Category list and score maps
+# =========================================================
+# 1. CATEGORY LIST + BACKWARD-COMPATIBLE SCORE MAPS
+# =========================================================
 VALID_CATEGORIES = [
     "theft",
     "burglary",
@@ -34,7 +36,7 @@ VALID_AUTHENTICITY = ["low", "medium", "high"]
 VALID_SEVERITY = ["low", "medium", "high"]
 VALID_DECISIONS = ["publish", "needs_retry", "reject"]
 
-# Maps string labels to the numeric fields the DB and dashboard still expect.
+# Temporary compatibility with old DB/dashboard fields.
 AUTHENTICITY_MAP = {
     "low": 0.20,
     "medium": 0.55,
@@ -67,13 +69,17 @@ CATEGORY_SCORE_MAP = {
 }
 
 
+# =========================================================
+# 2. SHARED STATE
+# =========================================================
 class State(TypedDict):
+    # Raw source fields
     incident_id: int
     source_platform: str
     source_url: str
     raw_text: str
 
-    # Cleaner output
+    # Cleaner fields
     cleaned_content: Optional[str]
     topic_bucket: Optional[str]
     location_text: Optional[str]
@@ -82,27 +88,29 @@ class State(TypedDict):
     latitude: Optional[float]
     longitude: Optional[float]
 
-    # Classifier output (rubric-based labels)
+    # LLM-rubric classifier fields
     category: Optional[str]
     authenticity_level: Optional[str]
     severity_level: Optional[str]
     classifier_reasoning: Optional[str]
 
-    # Numeric equivalents kept for DB/dashboard compatibility
+    # Old numeric fields kept for DB/dashboard compatibility
     category_score: Optional[float]
     authenticity_score: Optional[float]
     severity: Optional[float]
 
-    # Decision output
+    # Decision fields
     decision: Optional[str]
     decision_reason: Optional[str]
 
-    # Runtime
+    # Runtime fields
     messages: List[dict]
     retry_count: int
 
 
-# Helpers
+# =========================================================
+# 3. HELPERS
+# =========================================================
 def clean_json_response(raw: str) -> str:
     return raw.replace("```json", "").replace("```", "").strip()
 
@@ -121,10 +129,13 @@ def call_llm_json(prompt: str, model: str = "gpt-4o-mini", fallback: Optional[di
     if fallback is None:
         fallback = {}
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception:
+        return fallback
 
     raw = response.choices[0].message.content or ""
     return safe_json_loads(raw, fallback)
@@ -151,7 +162,10 @@ def category_to_score(category: Optional[str]) -> float:
 
 
 def has_some_core_incident_signal(state: State) -> bool:
-    # Requiring both fields would reject real incidents when extraction only missed one.
+    """
+    Softer than requiring both location and action.
+    This avoids rejecting real incidents just because extraction missed one field.
+    """
     return bool(state.get("location_text")) or bool(state.get("action_text"))
 
 
@@ -165,8 +179,11 @@ def build_classifier_message(
     severity: float,
     classifier_reasoning: str,
 ) -> dict:
-    # Intentionally includes both structured fields (for DB/frontend) and
-    # flattened text fields (content/note/reasoning) for simpler website renderers.
+    """
+    This message is intentionally redundant.
+    - structured fields are useful for DB/frontend components
+    - content/note/reasoning are useful for simple website renderers
+    """
     content = (
         f"Category: {category}\n"
         f"Category Score: {category_score}\n"
@@ -180,6 +197,7 @@ def build_classifier_message(
         "type": "classification_result",
         "attempt": attempt,
 
+        # structured fields
         "category": category,
         "category_score": category_score,
         "authenticity_level": authenticity_level,
@@ -188,6 +206,7 @@ def build_classifier_message(
         "severity": severity,
         "classifier_reasoning": classifier_reasoning,
 
+        # website-friendly fallback fields
         "content": content,
         "note": (
             f"Classified as {category}. "
@@ -222,15 +241,18 @@ def build_decision_message(
         "decision_reason": decision_reason,
         "review_of_classifier": review_of_classifier,
 
+        # website-friendly fallback fields
         "content": content,
         "note": f"Decision: {decision}",
         "reasoning": review_of_classifier,
     }
 
 
-# Crawler node
+# =========================================================
+# 4. CRAWLER NODE
+# =========================================================
 def crawler_node(state: State) -> dict:
-    # Placeholder — the real Reddit crawler feeds incidents in via process_incidents.
+    # This is still a mock crawler. Your real Reddit crawler can replace this.
     state["source_platform"] = state.get("source_platform") or "mock_Reddit"
     state["source_url"] = state.get("source_url") or "mock_reddit.com"
 
@@ -243,10 +265,21 @@ def crawler_node(state: State) -> dict:
         "note": "Crawler passed source post into the pipeline.",
     })
 
+    state["messages"].append({
+        "agent": "cleaner",
+        "type": "cleaner_result",
+        "source_platform": state.get("source_platform"),
+        "source_url": state.get("source_url"),
+        "content": "Cleaner cleaned and formatted data for better classification",
+        "note": "Cleaner cleaned and formatted data for better classification",
+    })
+
     return state
 
 
-# Classifier node
+# =========================================================
+# 5. CLASSIFIER NODE
+# =========================================================
 def classifier_node(state: State) -> dict:
     cleaned_content = state.get("cleaned_content")
     attempt = state["retry_count"] + 1
@@ -254,7 +287,7 @@ def classifier_node(state: State) -> dict:
     if not cleaned_content:
         raise ValueError("Classifier received incident without cleaned_content")
 
-    # Fast-path reject if the cleaner already flagged this as unrelated.
+    # HARD GATE: cleaner already marked it unrelated.
     if state.get("topic_bucket") == "other":
         category = "other"
         authenticity_level = "low"
@@ -361,7 +394,7 @@ Return ONLY JSON:
     severity_level = result.get("severity_level")
     classifier_reasoning = result.get("classifier_reasoning", "No reasoning provided.")
 
-    # Fall back to safe defaults if the LLM returned unexpected values.
+    # Validation fallback
     if not is_valid_category(category):
         category = "other"
 
@@ -398,11 +431,13 @@ Return ONLY JSON:
     }
 
 
-# Decision node
+# =========================================================
+# 6. DECISION NODE
+# =========================================================
 def decision_node(state: State) -> dict:
     attempt = state["retry_count"] + 1
 
-    # Reject immediately if classifier already said this isn't an incident.
+    # HARD REJECT: non-incident category.
     if state.get("category") == "other":
         decision = "reject"
         decision_reason = "Rejected because classifier categorized this as other / non-incident."
@@ -414,7 +449,7 @@ def decision_node(state: State) -> dict:
         state["messages"].append(build_decision_message(attempt, decision, instruction, decision_reason, review_of_classifier))
         return state
 
-    # Reject if there's no extracted incident signal AND the classifier isn't confident.
+    # SOFT HARD-GATE: reject only if cleaner found no core signal AND classifier is not confident.
     if not has_some_core_incident_signal(state) and state.get("authenticity_level") != "high":
         decision = "reject"
         decision_reason = (
@@ -429,7 +464,7 @@ def decision_node(state: State) -> dict:
         state["messages"].append(build_decision_message(attempt, decision, instruction, decision_reason, review_of_classifier))
         return state
 
-    # Stop looping after two retries to avoid burning unnecessary API calls.
+    # HARD RETRY LIMIT.
     if state["retry_count"] >= 2:
         decision = "reject"
         decision_reason = "Retry limit reached. Rejecting to prevent repeated classifier loops."
@@ -517,7 +552,7 @@ Return ONLY JSON:
     state["decision"] = decision
     state["decision_reason"] = decision_reason
 
-    # On retry, attach feedback so the classifier can see what to fix next attempt.
+    # If retry, add explicit feedback that classifier can read on next attempt.
     if decision == "needs_retry":
         state["retry_count"] += 1
 
@@ -546,14 +581,18 @@ Return ONLY JSON:
     return state
 
 
-# Conditional edge router
+# =========================================================
+# 7. CONDITIONAL EDGE ROUTER
+# =========================================================
 def edge_after_decision(state: State):
     if state["decision"] == "needs_retry":
         return "classifier"
     return END
 
 
-# Build graph
+# =========================================================
+# 8. BUILD GRAPH
+# =========================================================
 graph_builder = StateGraph(State)
 
 graph_builder.add_node("crawler", crawler_node)
@@ -568,6 +607,9 @@ graph_builder.add_conditional_edges("decision", edge_after_decision)
 graph = graph_builder.compile()
 
 
+# =========================================================
+# 9. PREPARE INITIAL STATE
+# =========================================================
 def prepare_initial_state(post: dict) -> State:
     return {
         "incident_id": post["incident_id"],
@@ -575,6 +617,7 @@ def prepare_initial_state(post: dict) -> State:
         "source_url": post.get("source_url", "mock_reddit.com"),
         "raw_text": post["raw_text"],
 
+        # cleaner output fields
         "cleaned_content": post.get("cleaned_content"),
         "topic_bucket": post.get("topic_bucket"),
         "location_text": post.get("location_text"),
@@ -583,31 +626,39 @@ def prepare_initial_state(post: dict) -> State:
         "longitude": post.get("longitude"),
         "normalized_time": post.get("normalized_time"),
 
+        # classifier output fields
         "category": None,
         "authenticity_level": None,
         "severity_level": None,
         "classifier_reasoning": None,
 
+        # old compatibility fields
         "category_score": None,
         "authenticity_score": None,
         "severity": None,
 
+        # decision output fields
         "decision": None,
         "decision_reason": None,
 
+        # runtime fields
         "messages": [],
         "retry_count": 0,
     }
 
 
-# Entry point
+# =========================================================
+# 10. RUN PIPELINE
+# =========================================================
 def run_pipeline_for_1_post(post: dict) -> State:
     state = prepare_initial_state(post)
     result = graph.invoke(state)
     return result
 
 
-# Console printing helpers for local runs
+# =========================================================
+# 11. PRINTING HELPERS
+# =========================================================
 def print_agent_conversation(result: dict):
     print("\nAgent Conversation:\n")
 
@@ -644,7 +695,7 @@ def print_agent_conversation(result: dict):
             print(f"   Review of Classifier: {msg.get('review_of_classifier')}\n")
 
         else:
-            # Fallback for unknown message types — grab whatever text is available.
+            # Generic fallback for website/debug compatibility.
             content = (
                 msg.get("content")
                 or msg.get("reasoning")
@@ -659,7 +710,9 @@ def print_agent_conversation(result: dict):
     print("-" * 40)
 
 
-# Main (local test run)
+# =========================================================
+# 12. MAIN
+# =========================================================
 if __name__ == "__main__":
     with open("data/mock_posts.json", "r", encoding="utf-8") as f:
         mock_posts = json.load(f)
