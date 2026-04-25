@@ -419,8 +419,7 @@ export const useStore = create<SafeWatchState>((set) => ({
     const { data, error } = await supabase
       .from("incidents")
       .select("incident_id, source_platform, source_url, raw_text, cleaned_content, status, category, authenticity_score, severity, location_text, latitude, longitude, timestamp_text, normalized_time, created_at")
-      .eq("status", "processed")
-      .eq("decision", "publish")
+      .eq("status", "published")
       .order("created_at", { ascending: false })
       .limit(200);
 
