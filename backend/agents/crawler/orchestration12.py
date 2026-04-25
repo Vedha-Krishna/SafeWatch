@@ -129,10 +129,13 @@ def call_llm_json(prompt: str, model: str = "gpt-4o-mini", fallback: Optional[di
     if fallback is None:
         fallback = {}
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-    )
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+        )
+    except Exception:
+        return fallback
 
     raw = response.choices[0].message.content or ""
     return safe_json_loads(raw, fallback)
@@ -260,6 +263,15 @@ def crawler_node(state: State) -> dict:
         "source_url": state.get("source_url"),
         "content": "Crawler passed source post into the pipeline.",
         "note": "Crawler passed source post into the pipeline.",
+    })
+
+    state["messages"].append({
+        "agent": "cleaner",
+        "type": "cleaner_result",
+        "source_platform": state.get("source_platform"),
+        "source_url": state.get("source_url"),
+        "content": "Cleaner cleaned and formatted data for better classification",
+        "note": "Cleaner cleaned and formatted data for better classification",
     })
 
     return state

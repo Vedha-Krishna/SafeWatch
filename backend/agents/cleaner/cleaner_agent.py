@@ -49,7 +49,6 @@ class CleanedIncident(BaseModel):
 
 
 def get_supabase_client():
-    """Create a Supabase client from environment variables."""
     try:
         from supabase import create_client
     except ImportError as exc:
@@ -88,11 +87,7 @@ def get_openai_client() -> "OpenAI":
 
 
 def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
-    """
-    Claim one incident for cleaning.
-    Selection rule: status='queued' AND cleaned_content is null.
-    Lock rule: set status='in_progress' and locked_by='cleaner_agent'.
-    """
+    """Claim one uncleaned queued incident and lock it so other workers skip it."""
     now_iso = datetime.now(ZoneInfo("UTC")).isoformat()
     response = (
         supabase.table("incidents")
@@ -145,8 +140,8 @@ def choose_normalized_time(
     cleaned_time = str(cleaned_normalized_time or "").strip() or None
     source = str(source_platform or "").strip().lower()
 
-    # Preserve crawler-provided Reddit post timestamps so later LLM steps
-    # don't overwrite source creation time with an inferred "current" time.
+    # Keep the original Reddit post timestamp — the LLM tends to infer "now" when no time is stated,
+    # which would replace the actual post creation time with something wrong.
     if source == "reddit" and existing_time:
         return existing_time
     return cleaned_time or existing_time
