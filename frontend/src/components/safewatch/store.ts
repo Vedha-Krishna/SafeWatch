@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
 import { supabase } from "../../lib/supabase";
 import {
+  mockIncidents,
+  mockClusters,
   SG_CENTER,
   type Incident,
   type Cluster,
@@ -74,10 +76,10 @@ function mapCategory(cat: string | null): string {
 
   switch (normalized) {
     case "theft":
-    case "attempted_theft": return "theft";
-    case "vandalism":       return "vandalism";
-    case "robbery":         return "snatch_theft";
-    case "scam_fraud":      return "scam";
+    case "attempted_theft":   return "theft";
+    case "vandalism":         return "vandalism";
+    case "robbery":           return "snatch_theft";
+    case "scam_fraud":        return "scam";
     case "harassment_threat":
     case "assault":
     case "sexual_offense":
@@ -89,9 +91,9 @@ function mapCategory(cat: string | null): string {
 // Numeric severity score → display enum
 function mapSeverity(score: number | null): Severity {
   if (score === null) return "medium";
-  if (score >= 0.7)  return "critical";
-  if (score >= 0.5)  return "high";
-  if (score >= 0.3)  return "medium";
+  if (score >= 0.7)   return "critical";
+  if (score >= 0.5)   return "high";
+  if (score >= 0.3)   return "medium";
   return "low";
 }
 
@@ -176,10 +178,10 @@ function rowToIncident(r: DbRow): Incident {
     validIsoTimestamp(r.timestamp_text) ?? validIsoTimestamp(r.normalized_time);
 
   return {
-    id: r.incident_id,
-    type: mapCategory(r.category),
+    id:       r.incident_id,
+    type:     mapCategory(r.category),
     severity: mapSeverity(r.severity),
-    title: categoryLabel,
+    title:    categoryLabel,
     description,
     location: { area, lat, lng },
     hasMapLocation,
@@ -376,6 +378,8 @@ interface SafeWatchState {
   severityFilter: SeverityFilter;
   mapFlyTo: { lat: number; lng: number; zoom: number; key: number } | null;
   sidebarCollapsed: boolean;
+  isLoading: boolean;
+
   toggleSidebar: () => void;
   selectIncident: (id: string | null) => void;
   selectCluster: (id: string | null) => void;
@@ -385,17 +389,23 @@ interface SafeWatchState {
   flyTo: (lat: number, lng: number, zoom?: number) => void;
   loadIncidents: () => Promise<void>;
   loadAgentLogs: () => Promise<void>;
+  subscribeRealtime: () => () => void;
 }
 
 export const useStore = create<SafeWatchState>((set) => ({
-  incidents: [],
-  clusters: [],
+  // Start with mock data so the map is never blank on first load.
+  // loadIncidents() will replace this with real Supabase data.
+  incidents: mockIncidents,
+  clusters:  mockClusters,
+
   selectedIncidentId: null,
-  selectedClusterId: null,
-  crimeType: "all",
-  timeRange: "7d",
-  severityFilter: "all",
-  mapFlyTo: null,
+  selectedClusterId:  null,
+  crimeType:          "all",
+  timeRange:          "7d",
+  severityFilter:     "all",
+  mapFlyTo:           null,
+  isLoading:          false,
+
   sidebarCollapsed:
     typeof window !== "undefined" && window.innerWidth < 640,
   agentLogsOpen: false,
@@ -409,24 +419,48 @@ export const useStore = create<SafeWatchState>((set) => ({
   setSeverityFilter: (v) => set({ severityFilter: v }),
   flyTo: (lat, lng, zoom = 15) =>
     set({ mapFlyTo: { lat, lng, zoom, key: Date.now() } }),
+
+  subscribeRealtime: () => {
+    const channel = supabase
+      .channel("incidents-realtime")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "incidents" },
+        (payload) => {
+          const newIncident = rowToIncident(payload.new as DbRow);
+          set((s) => ({ incidents: [newIncident, ...s.incidents] }));
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  },
+
   loadIncidents: async () => {
+    set({ isLoading: true });
+
     const { data, error } = await supabase
       .from("incidents")
       .select("incident_id, source_platform, source_url, raw_text, cleaned_content, status, category, authenticity_score, severity, location_text, latitude, longitude, timestamp_text, normalized_time, created_at")
-      .eq("status", "processed")
-      .eq("decision", "publish")
+      .eq("status", "published")
       .order("created_at", { ascending: false })
       .limit(200);
 
     if (error) {
       console.error("Failed to load incidents from Supabase:", error.message);
+      set({ incidents: mockIncidents, isLoading: false });
       return;
     }
 
-    console.log("Supabase raw response:", data);
-    const incidents = (data as DbRow[]).map(rowToIncident);
-    console.log("Mapped incidents:", incidents.length);
-    set({ incidents });
+    const incidents = (data as unknown as DbRow[]).map(rowToIncident);
+
+    if (incidents.length > 0) {
+      console.log(`Loaded ${incidents.length} incidents from Supabase.`);
+      set({ incidents, isLoading: false });
+    } else {
+      console.warn("No incidents in Supabase yet. Showing mock data.");
+      set({ incidents: mockIncidents, isLoading: false });
+    }
   },
   loadAgentLogs: async () => {
     const { data, error } = await supabase

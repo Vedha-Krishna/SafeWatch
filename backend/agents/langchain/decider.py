@@ -1,8 +1,24 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from .state import IncidentState
+
+try:
+    from backend.db.incidents import insert_incident
+    from backend.db.supabase import is_supabase_configured
+except ImportError:
+    from db.incidents import insert_incident
+    from db.supabase import is_supabase_configured
+
+logger = logging.getLogger(__name__)
+
+_DECISION_TO_STATUS = {
+    "publish": "published",
+    "reject": "rejected",
+    "needs_revision": "needs_revision",
+}
 
 
 def decision_node(state: IncidentState) -> dict[str, Any]:
@@ -18,6 +34,21 @@ def decision_node(state: IncidentState) -> dict[str, Any]:
     else:
         decision = "needs_revision"
         revision_count = state["revision_count"] + 1
+
+    if is_supabase_configured():
+        try:
+            record = {
+                "source_platform": "langgraph_pipeline",
+                "raw_text": state["raw_text"],
+                "status": _DECISION_TO_STATUS.get(decision, decision),
+                "decision": decision,
+                "category": state["category"],
+                "authenticity_score": state["authenticity_score"],
+                "agent_notes": state["notes"],
+            }
+            insert_incident(record)
+        except Exception as exc:
+            logger.error("Supabase write failed for post %s: %s", state["post_id"], exc)
 
     return {
         "decision": decision,
