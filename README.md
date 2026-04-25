@@ -1,4 +1,4 @@
-## HORNY_APPLE Monorepo
+## SafeWatch Monorepo
 
 ### Backend (Python + FastAPI + Agents)
 
@@ -102,7 +102,7 @@ Setup details are in [`docs/VERCEL_CRON.md`](docs/VERCEL_CRON.md).
 ## Repository Structure
 
 ```
-HORNY_APPLE/
+SafeWatch/
 ├── .env.example
 ├── README.md
 ├── graph.png
@@ -165,7 +165,7 @@ HORNY_APPLE/
 **1. Create and activate a virtual environment:**
 
 ```bash
-cd HORNY_APPLE/backend
+cd SafeWatch/backend
 python -m venv .venv
 
 # Windows
@@ -201,7 +201,7 @@ cp .env.example .env
 
 > **Vercel / frontend deployment:** Next.js only exposes variables to the browser if they start with `NEXT_PUBLIC_`. Add `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in your Vercel project settings.
 
-**4. Start the API server (from `HORNY_APPLE/`):**
+**4. Start the API server (from `SafeWatch/`):**
 
 ```bash
 python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
@@ -216,7 +216,7 @@ python -m backend.orchestration
 ### Frontend
 
 ```bash
-cd HORNY_APPLE/frontend
+cd SafeWatch/frontend
 npm install
 npm run dev   # → http://localhost:3000
 ```
