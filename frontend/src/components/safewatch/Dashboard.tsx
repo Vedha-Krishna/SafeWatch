@@ -8,11 +8,14 @@ import { useStore } from "./store";
 export default function Dashboard() {
   const loadIncidents = useStore((s) => s.loadIncidents);
   const loadAgentLogs = useStore((s) => s.loadAgentLogs);
+  const subscribeRealtime = useStore((s) => s.subscribeRealtime);
 
   useEffect(() => {
     loadIncidents();
     loadAgentLogs();
-  }, [loadIncidents, loadAgentLogs]);
+    const unsubscribe = subscribeRealtime();
+    return unsubscribe;
+  }, [loadIncidents, loadAgentLogs, subscribeRealtime]);
 
   return (
     <div className="h-dvh min-h-dvh w-screen flex flex-col bg-[#0a0e17] text-slate-100 overflow-hidden">
