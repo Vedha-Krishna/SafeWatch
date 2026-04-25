@@ -1,0 +1,859 @@
+import os
+import json
+from typing import List, Optional, TypedDict
+
+from dotenv import load_dotenv
+from langgraph.graph import END, START, StateGraph
+from openai import OpenAI
+from sklearn.metrics.pairwise import cosine_similarity
+
+from openai import OpenAI
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+from deterministic import CATEGORY_DEFINITIONS
+
+
+load_dotenv()
+
+_openai_client: OpenAI | None = None
+_category_embeddings: dict[str, list[list[float]]] | None = None
+
+## Define and Embed Categories
+def get_openai_client() -> OpenAI:
+    global _openai_client
+
+    if _openai_client is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("Missing OPENAI_API_KEY in environment.")
+        _openai_client = OpenAI(api_key=api_key)
+
+    return _openai_client
+
+
+def get_embedding(text: str) -> list[float]:
+    response = get_openai_client().embeddings.create(
+        model="text-embedding-3-small",
+        input=text
+    )
+    return response.data[0].embedding
+
+
+def get_category_embeddings() -> dict[str, list[list[float]]]:
+    global _category_embeddings
+
+    if _category_embeddings is None:
+        _category_embeddings = {
+            cat: [get_embedding(text) for text in prototypes]
+            for cat, prototypes in CATEGORY_DEFINITIONS.items()
+        }
+
+    return _category_embeddings
+
+
+# =========================================================
+# 1. SHARED STATE
+# ---------------------------------------------------------
+# This is the data structure that moves through the graph.
+# Each node reads from it and returns updates to it.
+# =========================================================
+class State(TypedDict):
+    ## CRAWLER FIELDS
+    incident_id: int
+    source_platform: str
+    source_url: str
+    raw_text: str
+
+    ## CLEANER FIELDS
+    cleaned_content: Optional[str]
+    topic_bucket: Optional[str]
+    location_text: Optional[str]
+    action_text: Optional[str]
+    normalized_time: Optional[str]
+
+    ## CLASSIFIER FIELDS
+    category: Optional[str]
+    category_score: Optional[float]
+    authenticity_score: Optional[float]
+    severity: Optional[float]
+
+    ## DECISION FIELDS
+    decision: Optional[str]
+
+    ## Message
+    messages: List[dict]
+
+    ## Retry Counter
+    retry_count: int
+
+
+# =========================================================
+# 2. CRAWLER NODE
+# ---------------------------------------------------------
+# For now this is NOT a real web crawler.
+# It acts like a lightweight extraction agent:
+# - reads raw_text
+# - extracts simple location / time / action signals
+# - returns updated fields
+# =========================================================
+def crawler_node(state: State) -> dict:
+
+    # MOCK: Fake data source (not real scraping or tool usage)
+    state["source_platform"] = "mock_Reddit"
+    state["source_url"] = "mock_reddit.com"
+
+    # MOCK: Logging step (simulates agent output message)
+    state["messages"].append({
+        "agent": "crawler",
+        "note": "Crawler extracted basic fields"
+    })
+
+    return state
+
+
+# =========================================================
+# 3. CLASSIFIER NODE
+# ---------------------------------------------------------
+# This node performs:
+# - vector similarity category selection
+# - optional LLM category override on retry
+# - LLM reasoning
+# - rubric-based authenticity scoring
+# - severity scoring
+# =========================================================
+def classifier_node(state: State) -> dict:
+    cleaned_content = state.get("cleaned_content")
+
+    if not cleaned_content:
+        raise ValueError("Classifier received incident without cleaned_content")
+
+    text = cleaned_content.lower()
+    attempt = state["retry_count"] + 1
+
+    # Get messages meant for classifier
+    feedback_msgs = [
+        m for m in state["messages"]
+        if m.get("feedback_to") == "classifier"
+    ]
+
+    wrong_category_retry = any(
+        m.get("instruction") == "wrong_category"
+        for m in feedback_msgs
+    )
+
+    location_text = state.get("location_text")
+    normalized_time = state.get("normalized_time")
+    topic_bucket = state.get("topic_bucket")
+    action_text = state.get("action_text")
+
+    if topic_bucket == "other":
+        state["messages"].append({
+            "agent": "classifier",
+            "note": f"Attempt {attempt}: Rejected because cleaner marked the post as unrelated or insufficiently relevant."
+        })
+
+        return {
+            "category": None,
+            "category_score": 0,
+            "authenticity_score": 0,
+            "severity": 0,
+            "decision": "reject",
+            "messages": state["messages"]
+        }
+
+    # ---------- Category via Vector Similarity ----------
+
+    incident_text_for_embedding = cleaned_content
+    incident_embedding = get_embedding(incident_text_for_embedding)
+
+    candidate_scores = {}
+
+    for cat, prototype_embs in get_category_embeddings().items():
+        scores = [
+            cosine_similarity([incident_embedding], [emb])[0][0]
+            for emb in prototype_embs
+        ]
+
+        # Average similarity is more stable than max similarity
+        candidate_scores[cat] = round(sum(scores) / len(scores), 4)
+
+    sorted_scores = dict(
+        sorted(candidate_scores.items(), key=lambda x: x[1], reverse=True)
+    )
+
+    category = next(iter(sorted_scores))
+    best_score = sorted_scores[category]
+
+    # Avoid forcing weak matches into crime categories
+    if category != "other" and best_score < 0.28:
+        category = "other"
+
+    category_score = best_score
+
+    # ---------- LLM CATEGORY OVERRIDE ON RETRY ----------
+    if wrong_category_retry:
+        override_prompt = f"""
+        You are a strict Singapore incident classifier.
+
+        The previous vector-similarity category may be wrong.
+
+        Cleaned incident:
+        {cleaned_content}
+
+        Action:
+        {action_text}
+
+        Location:
+        {location_text}
+
+        Time:
+        {normalized_time}
+
+        Previous vector category:
+        {category}
+
+        Candidate scores:
+        {sorted_scores}
+
+        Choose the best category from this list only:
+        - theft
+        - burglary
+        - robbery
+        - assault
+        - violent_crime
+        - vandalism
+        - scam_fraud
+        - identity_document_fraud
+        - harassment_threat
+        - sexual_offense
+        - suspicious_activity
+        - public_disorder
+        - regulatory_offence
+        - drug_offence
+        - traffic_transport_offence
+        - other
+
+        Rules:
+        - Use "other" if it is not a concrete local Singapore crime, scam, public safety, or disorder incident.
+        - Do not force a category just because it is the closest.
+        - If the vector category is wrong, replace it with the better category.
+
+        Return ONLY JSON:
+        {{
+            "category": "...",
+            "reason": "..."
+        }}
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-5-mini",
+            messages=[{"role": "user", "content": override_prompt}]
+        )
+
+        raw = response.choices[0].message.content
+        raw = raw.replace("```json", "").replace("```", "").strip()
+
+        try:
+            override_result = json.loads(raw)
+            llm_category = override_result.get("category")
+
+            if llm_category in CATEGORY_DEFINITIONS:
+                old_category = category
+                category = llm_category
+                category_score = sorted_scores.get(category, 0)
+
+                state["messages"].append({
+                    "agent": "classifier",
+                    "note": f"Attempt {attempt}: LLM category override applied: {old_category} → {category}",
+                    "reasoning": override_result.get("reason", "No reason provided")
+                })
+
+        except (json.JSONDecodeError, ValueError):
+            state["messages"].append({
+                "agent": "classifier",
+                "note": f"Attempt {attempt}: LLM category override failed; kept vector category."
+            })
+
+    state["messages"].append({
+        "agent": "classifier",
+        "note": f"Attempt {attempt}: Matched incident category: {category} (semantic score={category_score})",
+        "incident_summary_used": incident_text_for_embedding,
+        "candidate_scores": sorted_scores
+    })
+
+    # ACTUAL LLM REASONING (CORE)
+    # Classifier explains the category using feedback from Decision Agent
+    if feedback_msgs:
+        prompt = f"""
+        You are a petty crime and crime reasoning agent for Singapore.
+
+        Text:
+        {cleaned_content}
+
+        Final category selected:
+        {category}
+
+        Feedback:
+        {feedback_msgs}
+
+        Action:
+        {action_text}
+
+        Explain why this category fits the text, or explain what evidence is weak.
+
+        Respond ONLY in JSON:
+        {{
+            "llm_reasoning": "..."
+        }}
+        """
+
+        response = get_openai_client().chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+
+        raw = response.choices[0].message.content
+        raw = raw.replace("```json", "").replace("```", "").strip()
+
+        try:
+            result = json.loads(raw)
+
+            if "llm_reasoning" not in result:
+                raise ValueError
+
+        except (json.JSONDecodeError, ValueError):
+            result = {
+                "llm_reasoning": "LLM output invalid, fallback used"
+            }
+
+        state["messages"].append({
+            "agent": "classifier",
+            "llm_reasoning": f"Attempt {attempt}: {result['llm_reasoning']}"
+        })
+
+    # ---------- AUTHENTICITY & SEVERITY SCORE ----------
+    # LLM-as-a-Judge (RUBRIC-BASED FEATURE EXTRACTION)
+    prompt = f"""
+    You are evaluating a petty crime and crime report using a scoring rubric.
+
+    Text:
+    {cleaned_content}
+
+    Extracted Fields:
+    location={location_text}
+    time={normalized_time}
+    action={action_text}
+    category={category}
+    category_score={category_score}
+
+    Extract whether the following features are present (true/false):
+
+    DETAIL SPECIFICITY:
+    - specific_location
+    - specific_time
+    - specific_action
+    - object_or_person
+    - consequence
+
+    EVIDENCE QUALITY:
+    - firsthand_report
+    - clear_description
+    - media_mentioned
+    - source_link
+    - follow_up_details
+
+    CONSISTENCY:
+    - no_contradictions
+    - time_location_action_align
+    - category_matches
+    - no_exaggeration
+
+    RISK FLAGS:
+    - rumor_language
+    - missing_location
+    - missing_time
+    - ragebait
+    - contradiction
+
+    Return ONLY JSON:
+    {{
+        "specific_location": true/false,
+        "specific_time": true/false,
+        "specific_action": true/false,
+        "object_or_person": true/false,
+        "consequence": true/false,
+
+        "firsthand_report": true/false,
+        "clear_description": true/false,
+        "media_mentioned": true/false,
+        "source_link": true/false,
+        "follow_up_details": true/false,
+
+        "no_contradictions": true/false,
+        "time_location_action_align": true/false,
+        "category_matches": true/false,
+        "no_exaggeration": true/false,
+
+        "rumor_language": true/false,
+        "missing_location": true/false,
+        "missing_time": true/false,
+        "ragebait": true/false,
+        "contradiction": true/false
+    }}
+    """
+
+    # LLM extracts features based on the above
+    # Call LLM for rubric extraction
+    response = get_openai_client().chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    raw = response.choices[0].message.content
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
+    try:
+        features = json.loads(raw)
+
+        # Basic Validation
+        if not isinstance(features, dict):
+            raise ValueError
+
+    except json.JSONDecodeError:
+        features = {}
+
+        state["messages"].append({
+            "agent": "classifier",
+            "note": f"Attempt {attempt}: LLM feature extraction failed, fallback used",
+            "raw_output": raw
+        })
+
+    # Log successful extraction
+    state["messages"].append({
+        "agent": "classifier",
+        "reasoning": f"Attempt {attempt}: Extracted Evidence Features",
+        "features": features
+    })
+
+    # SCORE THE POST
+    # DETAIL SPECIFICITY
+    detail = (
+        0.5 * features.get("specific_location", 0) +
+        0.5 * features.get("specific_time", 0) +
+        0.5 * features.get("specific_action", 0) +
+        0.20 * features.get("object_or_person", 0) +
+        0.10 * features.get("consequence", 0)
+    )
+
+    # EVIDENCE QUALITY
+    evidence = (
+        0.30 * features.get("firsthand_report", 0) +
+        0.20 * features.get("clear_description", 0) +
+        0.25 * features.get("media_mentioned", 0) +
+        0.15 * features.get("source_link", 0) +
+        0.10 * features.get("follow_up_details", 0)
+    )
+
+    # CONSISTENCY
+    consistency = (
+        0.40 * features.get("no_contradictions", 0) +
+        0.30 * features.get("time_location_action_align", 0) +
+        0.20 * features.get("category_matches", 0) +
+        0.10 * features.get("no_exaggeration", 0)
+    )
+
+    # RISK FLAGS
+    risk = (
+        0.25 * features.get("rumor_language", 0) +
+        0.20 * features.get("missing_location", 0) +
+        0.15 * features.get("missing_time", 0) +
+        0.20 * features.get("ragebait", 0) +
+        0.20 * features.get("contradiction", 0)
+    )
+
+    # FINAL SCORE
+    authenticity_score = (
+        0.25 * detail +
+        0.25 * evidence +
+        0.15 * consistency -
+        0.05 * risk
+    )
+
+    # ---------- AUTHENTICITY SCORE ----------
+    authenticity_score = max(0, min(authenticity_score, 1))
+
+    # ---------- SEVERITY SCORE ----------
+    severity = round(
+        0.4 * detail +
+        0.3 * evidence +
+        0.3 * risk,
+        2
+    )
+
+    # Log Reasoning
+    state["messages"].append({
+        "agent": "classifier",
+        "note": f"Attempt {attempt}: Calculated Authenticity and Severity Scores: authenticity={round(authenticity_score, 2)}, severity={severity}",
+        "features": features
+    })
+
+    return {
+        "category": category,
+        "category_score": category_score,
+        "authenticity_score": authenticity_score,
+        "severity": severity,
+        "messages": state["messages"]
+    }
+
+
+# =========================================================
+# 4. DECISION NODE
+# ---------------------------------------------------------
+# Final decision:
+# - publish
+# - needs_retry
+# - reject
+#
+# =========================================================
+def decision_node(state: State) -> dict:
+
+    # HARD REJECT: non-incident / irrelevant category
+    if state["category"] == "other":
+        state["decision"] = "reject"
+
+        state["messages"].append({
+            "agent": "decision",
+            "note": "Decision: reject",
+            "decision_reason": "Rejected because classifier categorized this as other / non-incident."
+        })
+
+        return state
+
+    # HARD RETRY GUARD
+    if state["retry_count"] >= 2:
+        state["decision"] = "reject"
+        state["messages"].append({
+            "agent": "decision",
+            "note": "Decision: reject",
+            "decision_reason": "Retry limit reached. Rejecting to prevent repeated classifier loops."
+        })
+        return state
+
+    prompt = f"""
+    You are the final decision agent in a petty crime and crime incident pipeline for Singapore.
+
+    Decide one of:
+    - publish
+    - needs_retry
+    - reject
+
+    Incident data:
+    category: {state["category"]}
+    authenticity_score: {state["authenticity_score"]}
+    severity: {state["severity"]}
+    cleaned_content: {state["cleaned_content"]}
+    location: {state["location_text"]}
+    time: {state["normalized_time"]}
+    action: {state["action_text"]}
+    category_score: {state["category_score"]}
+    retry_count: {state["retry_count"]}
+
+    Authenticity Score interpretation:
+    - 0.00 to 0.09 = weak evidence
+    - 0.10 to 0.15 = moderate evidence
+    - 0.16 to 0.25 = strong evidence
+    - 0.25 and above = very strong
+    - Do not treat 0.25 as low.
+    - In this system, a score of 0.25 can already support publication if the report contains a concrete location, time, and action.
+    - Community reports do not require police reports, media, or multiple witnesses to be publishable.
+
+    Rules:
+    - Relevance comes before authenticity. A factual article can still be rejected if it is not a concrete petty-crime, scam, public safety, or disorder incident.
+    - Reject non-incident news, including business news, legal commentary, political news, trend articles, corporate disputes, celebrity news, and general discussion.
+    - Do not publish general news unless it describes a concrete crime, scam, public safety, or disorder incident.
+    - Reports with concrete location, time, and action should generally be publishable even without witness statements, media, or police reports.
+    - Do not require corroborating evidence for ordinary community petty-crime reports if the incident details are specific and coherent.
+    - Use "needs_retry" only if missing information could realistically be improved.
+    - Prefer "reject" if the post is factual but not relevant to petty crime or public safety.
+    - Reject non-incident news, Business/legal/political/trend articles should be rejected.
+    - Reject overseas incidents unless the incident occurred in Singapore or creates a direct public-safety risk in Singapore.
+    - If the category seems wrong but the incident is still relevant, return "needs_retry" and set instruction to "wrong_category".
+
+    Respond ONLY in JSON:
+    {{
+        "decision": "publish | needs_retry | reject",
+        "decision_reason": "...",
+        "instruction": "..."
+    }}
+    """
+
+    response = get_openai_client().chat.completions.create(
+        model="gpt-5-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    raw = response.choices[0].message.content
+    raw = raw.replace("```json", "").replace("```", "").strip()
+
+    try:
+        result = json.loads(raw)
+
+        if "decision" not in result:
+            raise ValueError
+
+    except (json.JSONDecodeError, ValueError):
+        # HARD RETRY GUARD
+        if state["retry_count"] >= 2:
+            result = {
+                "decision": "reject",
+                "decision_reason": "LLM output invalid, fallback reject used",
+                "instruction": "No further retry"
+            }
+        else:
+            result = {
+                "decision": "needs_retry",
+                "decision_reason": "LLM output invalid, fallback retry used",
+                "instruction": "Improve classification using stronger evidence"
+            }
+
+    state["decision"] = result["decision"]
+
+    if state["decision"] == "needs_retry":
+        state["retry_count"] += 1
+
+        state["messages"].append({
+            "agent": "decision",
+            "feedback_to": "classifier",
+            "instruction": result.get("instruction", "Improve classification using stronger evidence"),
+            "reason": result.get("decision_reason", "Needs stronger evidence")
+        })
+
+    state["messages"].append({
+        "agent": "decision",
+        "note": f"Decision: {state['decision']}",
+        "decision_reason": result.get("decision_reason", "No reason provided")
+    })
+
+    print("DEBUG retry_count:", state["retry_count"])
+    print("DEBUG current decision state:", state.get("decision"))
+
+    return state
+
+
+# =========================================================
+# 5. CONDITIONAL EDGE ROUTER
+# ---------------------------------------------------------
+# This determines where to go AFTER the decision node.
+# =========================================================
+def edge_after_decision(state: State) -> dict:
+    if state["decision"] == "needs_retry":
+        return "classifier"
+    return END
+
+
+# =========================================================
+# 6. BUILD GRAPH
+# =========================================================
+## state JSON
+graph_builder = StateGraph(State)
+
+## NODES
+graph_builder.add_node("crawler", crawler_node)
+graph_builder.add_node("classifier", classifier_node)
+graph_builder.add_node("decision", decision_node)
+
+## EDGES
+graph_builder.add_edge(START, "crawler")
+graph_builder.add_edge("crawler", "classifier")
+graph_builder.add_edge("classifier", "decision")
+
+## CONDITIONAL EDGES
+graph_builder.add_conditional_edges("decision", edge_after_decision)
+
+## COMPILE
+graph = graph_builder.compile()
+
+
+## Display Graph
+# png_data = graph.get_graph().draw_mermaid_png()
+
+# with open("graph.png", "wb") as f:
+#     f.write(png_data)
+
+# print("Saved as graph.png")
+
+
+# =========================================================
+# 7. HELPER: PREPARE INITIAL STATE
+# ---------------------------------------------------------
+# Your JSON file only needs to store raw/mock data.
+# This function fills in the empty runtime fields.
+# =========================================================
+def prepare_initial_state(post: dict) -> State:
+    return {
+        "incident_id": post["incident_id"],
+        "source_platform": post["source_platform"],
+        "source_url": post["source_url"],
+        "raw_text": post["raw_text"],
+
+        # cleaner output fields
+        "cleaned_content": post.get("cleaned_content"),
+        "topic_bucket": post.get("topic_bucket"),
+        "location_text": post.get("location_text"),
+        "action_text": post.get("action_text"),
+        "latitude": post.get("latitude"),
+        "longitude": post.get("longitude"),
+        "normalized_time": post.get("normalized_time"),
+
+        # classifier output fields
+        "category": None,
+        "category_score": None,
+        "authenticity_score": None,
+        "severity": None,
+
+        "decision": None,
+
+        "messages": [],
+        "retry_count": 0,
+    }
+
+
+# =========================================================
+# 8. RUN ONE POST THROUGH THE PIPELINE
+# ---------------------------------------------------------
+# =========================================================
+def run_pipeline_for_1_post(post: dict) -> State:
+    state = prepare_initial_state(post)
+
+    result = graph.invoke(state)
+
+    return result
+
+
+# =========================================================
+# 9. MAIN
+# ---------------------------------------------------------
+# Load mock posts, run each one, print results.
+# =========================================================
+if __name__ == "__main__":
+    with open("data/mock_posts.json", "r", encoding="utf-8") as f:
+        mock_posts = json.load(f)
+
+    all_results = []
+
+    for i, post in enumerate(mock_posts, start=1):
+        post["incident_id"] = i
+
+        final_state = run_pipeline_for_1_post(post)
+        all_results.append(final_state)
+
+    print("\n=== INCIDENT RESULTS ===\n")
+
+    accepted = 0
+    rejected = 0
+
+    for result in all_results:
+        # print("\n=== RAW MESSAGES ===\n")
+        # print(result["messages"])
+
+        if result["decision"] == "publish":
+            accepted += 1
+        elif result["decision"] == "reject":
+            rejected += 1
+
+        print(f"Incident ID: {result['incident_id']}")
+        print(f"Retry Count: {result['retry_count']}")
+        print(f"Decision: {result['decision'].upper()}")
+
+        for msg in reversed(result["messages"]):
+            if msg.get("agent") == "decision" and "decision_reason" in msg:
+                print(f"Decision Reason: {msg['decision_reason']}")
+                break
+
+        print(f"Category: {result['category']}")
+        print(f"Authenticity Score: {round(result['authenticity_score'], 2)}")
+        print(f"Severity: {result['severity']}")
+        print(f"Location: {result['location_text']}")
+        print(f"Action: {result['action_text']}")
+        print(f"Time: {result['normalized_time']}")
+        print(f"Cleaned Content: {result['cleaned_content']}")
+        print(f"Category Score: {result['category_score']}")
+
+        # Show ONLY key reasoning (not spam)
+        last_reasoning = None
+        for msg in reversed(result["messages"]):
+            if "llm_reasoning" in msg:
+                last_reasoning = msg["llm_reasoning"]
+                break
+
+        if last_reasoning:
+            print(f"LLM Reasoning: {last_reasoning}")
+
+        # =========================
+        # AI-to-AI INTERACTION LOG
+        # (comment this whole block when not needed)
+        # =========================
+
+        print("\n Agent Conversation:\n")
+
+        for msg in result["messages"]:
+            agent = msg.get("agent", "unknown")
+
+            if "llm_reasoning" in msg:
+                print(f"  {agent.capitalize()} (LLM):")
+                print(f"   {msg['llm_reasoning']}\n")
+
+            elif "reasoning" in msg:
+                print(f"  {agent.capitalize()} (system):")
+                print(f"   {msg['reasoning']}\n")
+
+            elif "instruction" in msg:
+                print(f"  {agent.capitalize()}")
+                print(f"   {msg['instruction']}\n")
+
+            elif "note" in msg:
+                print(f"  {agent.capitalize()}:")
+                print(f"   {msg['note']}\n")
+
+        print("-" * 40)
+
+    print("\n=== SUMMARY ===\n")
+
+    total = len(all_results)
+
+    print(f"Total Incidents: {total}")
+    print(f"Accepted (Published): {accepted}")
+    print(f"Rejected: {rejected}")
+
+    if total > 0:
+        print(f"Acceptance Rate: {round((accepted / total) * 100, 1)}%")
+
+
+def print_agent_conversation(result: dict):
+    print("\nAgent Conversation:\n")
+
+    for msg in result.get("messages", []):
+        agent = msg.get("agent", "unknown")
+
+        if "llm_reasoning" in msg:
+            print(f"  {agent.capitalize()} (LLM):")
+            print(f"   {msg['llm_reasoning']}\n")
+
+        elif "reasoning" in msg:
+            print(f"  {agent.capitalize()} (system):")
+            print(f"   {msg['reasoning']}\n")
+
+        elif "instruction" in msg:
+            print(f"  {agent.capitalize()}:")
+            print(f"   {msg['instruction']}\n")
+
+        elif "decision_reason" in msg:
+            print(f"  {agent.capitalize()} decision reason:")
+            print(f"   {msg['decision_reason']}\n")
+
+        elif "note" in msg:
+            print(f"  {agent.capitalize()}:")
+            print(f"   {msg['note']}\n")
+
+    print("-" * 40)

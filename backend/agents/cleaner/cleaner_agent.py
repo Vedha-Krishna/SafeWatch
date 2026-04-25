@@ -20,6 +20,15 @@ class CleanedIncident(BaseModel):
             "with slang, emotion, and usernames removed."
         ),
     )
+
+    action_text: Optional[str] = Field(
+        default=None,
+        description=(
+            "Short factual action/event phrase for dashboard display, "
+            "e.g. 'wallet stolen', 'phone snatched', 'suspected scam', 'shop break-in'."
+        ),
+    )
+
     topic_bucket: Literal["singapore_news", "singapore_viral", "other"]
     location_text: Optional[str] = Field(
         default=None,
@@ -51,9 +60,7 @@ def get_supabase_client():
     load_dotenv()
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = (
-        os.getenv("SUPABASE_KEY")
-        or os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-        or os.getenv("SUPABASE_ANON_KEY")
+        os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     )
 
     if not supabase_url or not supabase_key:
@@ -89,11 +96,11 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
     now_iso = datetime.now(ZoneInfo("UTC")).isoformat()
     response = (
         supabase.table("incidents")
-        .select("incident_id, raw_text, status, cleaned_content")
+        .select("incident_id, raw_text, status, cleaned_content, source_platform, normalized_time")
         .eq("status", "queued")
         .is_("cleaned_content", "null")
         .is_("locked_by", "null")
-        .lte("available_at", now_iso)
+        # .lte("available_at", now_iso)
         .order("created_at", desc=False)
         .limit(25)
         .execute()
@@ -129,6 +136,22 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
     return None
 
 
+def choose_normalized_time(
+    source_platform: str | None,
+    existing_normalized_time: Any,
+    cleaned_normalized_time: str | None,
+) -> str | None:
+    existing_time = str(existing_normalized_time or "").strip() or None
+    cleaned_time = str(cleaned_normalized_time or "").strip() or None
+    source = str(source_platform or "").strip().lower()
+
+    # Preserve crawler-provided Reddit post timestamps so later LLM steps
+    # don't overwrite source creation time with an inferred "current" time.
+    if source == "reddit" and existing_time:
+        return existing_time
+    return cleaned_time or existing_time
+
+
 def clean_with_llm(openai_client: Any, raw_text: str) -> CleanedIncident:
     current_sgt = datetime.now(ZoneInfo("Asia/Singapore")).isoformat(timespec="seconds")
     system_prompt = (
@@ -137,6 +160,7 @@ def clean_with_llm(openai_client: Any, raw_text: str) -> CleanedIncident:
         f"Current Singapore time (SGT, UTC+8): {current_sgt}\n"
         "Rules:\n"
         "- Output exactly 1-2 sentences in cleaned_content.\n"
+        "- Output action_text as a short factual event phrase, e.g. 'wallet stolen', 'suspected scam', 'shop break-in'.\n"
         "- Remove slang, emotion, exaggeration, and usernames/handles.\n"
         "- Keep factual details only (what happened, where, when, who/what affected if available).\n"
         "- Select topic_bucket as one of: singapore_news, singapore_viral, other.\n"
@@ -175,14 +199,22 @@ def update_and_handoff(
     supabase: Any,
     incident_id: Any,
     cleaned_incident: CleanedIncident,
+    source_platform: str | None = None,
+    existing_normalized_time: Any = None,
 ) -> None:
+    normalized_time = choose_normalized_time(
+        source_platform=source_platform,
+        existing_normalized_time=existing_normalized_time,
+        cleaned_normalized_time=cleaned_incident.normalized_time,
+    )
     update_payload = {
         "cleaned_content": cleaned_incident.cleaned_content,
+        "action_text": cleaned_incident.action_text,
         "topic_bucket": cleaned_incident.topic_bucket,
         "location_text": cleaned_incident.location_text,
         "latitude": cleaned_incident.latitude,
         "longitude": cleaned_incident.longitude,
-        "normalized_time": cleaned_incident.normalized_time,
+        "normalized_time": normalized_time,
         "status": "queued",
         "locked_by": None,
         "locked_at": None,
@@ -220,7 +252,13 @@ def run_once() -> bool:
 
     try:
         cleaned_incident = clean_with_llm(openai_client, raw_text)
-        update_and_handoff(supabase, incident_id, cleaned_incident)
+        update_and_handoff(
+            supabase,
+            incident_id,
+            cleaned_incident,
+            source_platform=str(incident.get("source_platform") or ""),
+            existing_normalized_time=incident.get("normalized_time"),
+        )
     except Exception as exc:
         mark_failed(supabase, incident_id, str(exc))
         print(f"Incident {incident_id} failed during cleaning: {exc}")
@@ -234,4 +272,9 @@ def run_once() -> bool:
 
 
 if __name__ == "__main__":
-    run_once()
+    processed = 0
+
+    while run_once():
+        processed += 1
+
+    print(f"Cleaner finished. Processed {processed} incident(s).")

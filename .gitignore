@@ -34,6 +34,9 @@ __pycache__/
 dist/
 build/
 
+# Crawler script excluded from version control
+backend/agents/crawler/reddit_crawler.py
+
 
 # -------------------------------------------------------
 # NODE / JAVASCRIPT

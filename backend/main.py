@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-main.py — FastAPI application entry point for PettyCrimeSG.
+main.py - FastAPI application entry point for PettyCrimeSG.
 
 This file defines all the HTTP API routes that the frontend React app calls.
 FastAPI automatically generates interactive documentation at /docs when the
@@ -17,21 +17,23 @@ HOW TO START THE SERVER:
     Then open http://127.0.0.1:8000/docs to see all routes with descriptions.
 
 API ROUTE OVERVIEW:
-    GET /                               — API info and link to docs
-    GET /health                         — Health check (also shows DB status)
-    GET /api/incidents                  — List incidents from JSON file (original endpoint)
-    GET /api/db/incidents               — List incidents from Supabase database
-    GET /api/db/incidents/{id}          — Get a single incident by ID
-    GET /api/db/incidents/{id}/feedback — Get all agent feedback for an incident
-    GET /api/db/official-reports        — List all mock official reports
-    POST /api/db/incidents              — Save a new incident to the database
-    POST /api/db/incidents/{id}/feedback — Send agent feedback for an incident
+    GET /                               - API info and link to docs
+    GET /health                         - Health check (also shows DB status)
+    GET /api/incidents                  - List incidents from JSON file (original endpoint)
+    GET /api/cron/safewatch             - Trigger the scheduled pipeline (cron)
+    GET /api/db/incidents               - List incidents from Supabase database
+    GET /api/db/incidents/{id}          - Get a single incident by ID
+    GET /api/db/incidents/{id}/feedback - Get all agent feedback for an incident
+    GET /api/db/official-reports        - List all mock official reports
+    POST /api/db/incidents              - Save a new incident to the database
+    POST /api/db/incidents/{id}/feedback - Send agent-to-agent feedback for an incident
 """
 
 import logging
+import os
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -40,12 +42,13 @@ logger = logging.getLogger(__name__)
 # -----------------------------------------------------------------------
 # Import the crawler functions (used by the original JSON-based endpoint).
 # The try/except handles two different ways to run the server:
-#   - As a package: python -m uvicorn backend.main:app  →  uses "from .agents..."
-#   - From inside backend/: python -m uvicorn main:app  →  uses "from agents..."
+#   - As a package: python -m uvicorn backend.main:app  ->  uses "from .agents..."
+#   - From inside backend/: python -m uvicorn main:app  ->  uses "from agents..."
 # -----------------------------------------------------------------------
 try:
     from .agents.crawler.deterministic import load_posts, process_posts
     from .agents.langchain.workflow import graph as pipeline_graph
+    from .cron_pipeline import run_safewatch_pipeline
     from .db import (
         is_supabase_configured,
         get_all_incidents,
@@ -59,6 +62,7 @@ try:
 except ImportError:
     from agents.crawler.deterministic import load_posts, process_posts
     from agents.langchain.workflow import graph as pipeline_graph
+    from cron_pipeline import run_safewatch_pipeline
     from db import (
         is_supabase_configured,
         get_all_incidents,
@@ -109,7 +113,7 @@ app.add_middleware(
 
 
 # -----------------------------------------------------------------------
-# HELPER FUNCTION — Used by the original JSON-based endpoint.
+# HELPER FUNCTION - Used by the original JSON-based endpoint.
 # -----------------------------------------------------------------------
 
 def read_incident_drafts_from_json(input_path: Path = DEFAULT_INPUT_PATH) -> list[dict]:
@@ -144,13 +148,26 @@ def read_incident_drafts_from_json(input_path: Path = DEFAULT_INPUT_PATH) -> lis
 
 
 # -----------------------------------------------------------------------
+# HELPER - Cron authorization
+# -----------------------------------------------------------------------
+
+def verify_cron_authorization(authorization: str | None) -> None:
+    cron_secret = os.getenv("CRON_SECRET")
+    if not cron_secret:
+        raise HTTPException(status_code=500, detail="CRON_SECRET is not configured.")
+
+    if authorization != f"Bearer {cron_secret}":
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+# -----------------------------------------------------------------------
 # ROUTE: GET /
 # -----------------------------------------------------------------------
 
 @app.get("/")
 def root() -> dict[str, str]:
     """
-    API root — returns a welcome message and link to the docs.
+    API root - returns a welcome message and link to the docs.
 
     This is the first thing you see when you open the API URL in a browser.
     """
@@ -181,7 +198,7 @@ def health() -> dict[str, str]:
 
 # -----------------------------------------------------------------------
 # ROUTE: GET /api/incidents
-# (Original endpoint — reads from local JSON file, not the database)
+# (Original endpoint - reads from local JSON file, not the database)
 # -----------------------------------------------------------------------
 
 @app.get("/api/incidents")
@@ -194,7 +211,7 @@ def list_incidents_from_json(
         default=50,
         ge=1,
         le=500,
-        description="Maximum number of incidents to return (1–500)."
+        description="Maximum number of incidents to return (1-500)."
     ),
 ) -> dict[str, object]:
     """
@@ -228,7 +245,23 @@ def list_incidents_from_json(
 
 
 # -----------------------------------------------------------------------
-# ROUTES: /api/db/incidents — Database-backed incident endpoints
+# ROUTE: GET /api/cron/safewatch
+# -----------------------------------------------------------------------
+
+@app.get("/api/cron/safewatch")
+def run_safewatch_cron(
+    authorization: str | None = Header(default=None),
+) -> dict[str, object]:
+    verify_cron_authorization(authorization)
+
+    try:
+        return run_safewatch_pipeline()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Cron pipeline failed: {exc}") from exc
+
+
+# -----------------------------------------------------------------------
+# ROUTES: /api/db/incidents - Database-backed incident endpoints
 # -----------------------------------------------------------------------
 
 @app.get("/api/db/incidents")
@@ -249,7 +282,7 @@ def list_incidents_from_database(
         default=50,
         ge=1,
         le=500,
-        description="Maximum number of incidents to return (1–500)."
+        description="Maximum number of incidents to return (1-500)."
     ),
 ) -> dict[str, object]:
     """
@@ -322,7 +355,7 @@ def get_incident_feedback(incident_id: str) -> dict[str, object]:
     Get the full agent feedback history for a specific incident.
 
     This shows the complete conversation between agents as they processed
-    this incident — useful for understanding why an incident went through
+    this incident - useful for understanding why an incident went through
     multiple revisions, or for displaying the agent reasoning in the dashboard.
 
     Args:
@@ -397,12 +430,12 @@ def send_agent_feedback(incident_id: str, feedback_data: dict) -> dict[str, obje
         incident_id: The UUID of the incident this feedback is about.
 
     Request body should include:
-        from_agent (str)       — e.g. "classifier"
-        to_agent (str)         — e.g. "crawler"
-        feedback_type (str)    — e.g. "location_unclear"
-        reason (str)           — Why is this feedback being sent?
-        requested_action (str) — What should the receiving agent do?
-        priority (str)         — "low", "medium", or "high"
+        from_agent (str)       - e.g. "classifier"
+        to_agent (str)         - e.g. "crawler"
+        feedback_type (str)    - e.g. "location_unclear"
+        reason (str)           - Why is this feedback being sent?
+        requested_action (str) - What should the receiving agent do?
+        priority (str)         - "low", "medium", or "high"
     """
     if not is_supabase_configured():
         raise HTTPException(
@@ -461,7 +494,7 @@ def run_pipeline(request: _PipelineRunRequest) -> dict[str, object]:
     """
     Run the LangGraph pipeline on one or more raw posts.
 
-    Each post is passed through the crawler → cleaner → classifier → decider
+    Each post is passed through the crawler -> cleaner -> classifier -> decider
     graph sequentially. The decider node writes the result to Supabase when
     the database is configured.
 
