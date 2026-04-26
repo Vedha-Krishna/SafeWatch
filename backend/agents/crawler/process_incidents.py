@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any
+from typing import Any, Optional, Optional, Optional, Optional, Optional, Optional, Optional, Optional, Optional
 
 from dotenv import load_dotenv
 from supabase import create_client
@@ -24,7 +24,7 @@ def get_supabase_client() -> Any:
     return create_client(supabase_url, supabase_key)
 
 
-def fetch_queued_incidents(supabase: Any, limit: int | None = None) -> list[dict]:
+def fetch_queued_incidents(supabase: Any, limit: Optional[int] = None) -> list[dict]:
     query = (
         supabase.table("incidents")
         .select("*")
@@ -83,7 +83,7 @@ def update_incident_after_pipeline(supabase: Any, row_id: int, result: dict) -> 
     )
 
 
-def process_queued_incidents(max_incidents: int | None = None) -> dict[str, int]:
+def process_queued_incidents(max_incidents: Optional[int] = None) -> dict[str, int]:
     if max_incidents is not None and max_incidents <= 0:
         print("Skipping incident processing because max_incidents is 0.")
         return {"found": 0, "processed": 0, "failed": 0}
