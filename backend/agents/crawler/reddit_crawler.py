@@ -13,7 +13,7 @@ import requests
 from dotenv import load_dotenv
 from transformers import pipeline
 
-DEFAULT_SUBREDDIT = "mockpostsforNBT"
+DEFAULT_SUBREDDIT = "singapore"
 DEFAULT_INCREMENTAL_LIMIT = 25
 DEFAULT_BACKFILL_LIMIT = 100
 DEFAULT_USER_AGENT = (
@@ -465,9 +465,10 @@ def crawl_reddit_posts(
             stopped_at_checkpoint = True
             break
 
+        relevant, source = evaluate_post_relevance(extracted["title"], extracted["body_text"])
         comment_texts: list[str] = []
 
-        if include_comments:
+        if include_comments and not relevant:
             comment_texts = fetch_post_comments(
                 permalink=extracted["permalink"],
                 user_agent=user_agent,
@@ -477,15 +478,22 @@ def crawl_reddit_posts(
             )
             comment_posts_checked += 1
             comment_items_used += len(comment_texts)
-
-        payloads.append(
-            to_incident_payload(
-                extracted,
-                comment_texts=comment_texts if include_comments else None,
+            relevant, source = evaluate_post_relevance(
+                extracted["title"],
+                extracted["body_text"],
+                comment_texts=comment_texts,
             )
-        )
 
-    passed_filter += 1
+        if relevant:
+            if source == "comments":
+                relevant_from_comments += 1
+            payloads.append(
+                to_incident_payload(
+                    extracted,
+                    comment_texts=comment_texts if include_comments else None,
+                )
+            )
+            passed_filter += 1
 
     stats = {
         "fetched": len(posts),

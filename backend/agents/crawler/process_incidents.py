@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Any, Optional, Optional, Optional, Optional, Optional, Optional, Optional, Optional, Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from supabase import create_client
