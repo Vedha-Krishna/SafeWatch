@@ -21,9 +21,15 @@
    - 5.7 [Multimodal Verifier](#57-multimodal-verifier)
 6. [Database](#6-database)
    - 6.1 [Supabase Client](#61-supabase-client)
-   - 6.2 [Incidents Table](#62-incidents-table)
-   - 6.3 [Agent Feedback Table](#63-agent-feedback-table)
-   - 6.4 [Mock Official Reports Table](#64-mock-official-reports-table)
+   - 6.2 [Core Incidents Table](#62-core-incidents-table)
+   - 6.3 [Incident Queue Table](#63-incident-queue-table)
+   - 6.4 [Incident Analysis Table](#64-incident-analysis-table)
+   - 6.5 [Incident Decisions Table](#65-incident-decisions-table)
+   - 6.6 [Incident Locations Table](#66-incident-locations-table)
+   - 6.7 [Incident Agent Messages Table](#67-incident-agent-messages-table)
+   - 6.8 [Agent Feedback Table](#68-agent-feedback-table)
+   - 6.9 [Incident Full View](#69-incident-full-view)
+   - 6.10 [Deprecated: Mock Official Reports](#610-deprecated-mock-official-reports-table)
 7. [API Reference](#7-api-reference)
 8. [Frontend](#8-frontend)
    - 8.1 [App Shell](#81-app-shell)
@@ -544,41 +550,35 @@ if is_supabase_configured():
 
 ---
 
-### 6.2 Incidents Table
+### 6.2 Core Incidents Table
 
 **File:** `backend/db/incidents.py` | **Table:** `incidents`
 
-| Column | Type | Description |
-|---|---|---|
-| `incident_id` | uuid | Auto-generated primary key |
-| `source_platform` | text | e.g. `"reddit"`, `"langgraph_pipeline"` |
-| `raw_text` | text | Original post |
-| `cleaned_content` | text | Clean summary from the Cleaner Agent |
-| `category` | text | Crime type |
-| `authenticity_score` | float | 0.0 (probably fake) → 1.0 (very likely real) |
-| `severity` | float | 0.0 (minor) → 1.0 (serious) |
-| `location_text` | text | Place name (e.g. "Bedok MRT") |
-| `latitude` | float | GPS latitude |
-| `longitude` | float | GPS longitude |
-| `normalized_time` | timestamptz | ISO-8601 in Singapore time |
-| `status` | text | See status values below |
-| `decision` | text | Final agent decision |
-| `agent_notes` | jsonb | List of notes from each agent |
-| `created_at` | timestamptz | Auto-set by Supabase |
+Stores the raw incident entry and source metadata. Linked to other tables for analysis, decisions, location, and queue status.
 
-**Status values:**
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `incident_id` | uuid | PRIMARY KEY | Auto-generated unique identifier |
+| `dedupe_key` | text | NOT NULL, UNIQUE | Key for deduplication across sources |
+| `source_platform` | enum | NOT NULL | e.g. `"reddit"`, `"mock_forum"`, `"langgraph_pipeline"` |
+| `source_type` | enum | NULL | Type of post (comment, thread, post, etc.) |
+| `source_item_id` | text | NULL | Platform-specific post ID |
+| `parent_source_item_id` | text | NULL | ID of parent post if this is a reply |
+| `source_url` | text | NULL | Direct link to the original post |
+| `raw_text` | text | NOT NULL | Original unmodified post text |
+| `language_code` | text | DEFAULT `'en'` | ISO-639 language code |
+| `timestamp_text` | text | NULL | Raw timestamp string from source |
+| `normalized_time` | timestamptz | NULL | Parsed timestamp in Singapore time |
+| `duplicate_of` | uuid | FOREIGN KEY | Points to primary incident if duplicate |
+| `created_at` | timestamptz | DEFAULT now() | Record creation timestamp |
+| `updated_at` | timestamptz | DEFAULT now() | Record last update timestamp |
 
-| Status | Meaning |
-|---|---|
-| `raw` | Just saved, not processed yet |
-| `queued` | Ready for the next agent |
-| `in_progress` | An agent is working on it right now |
-| `candidate` | Crawler approved it |
-| `classified` | Classifier has scored it |
-| `published` | Approved — shows on the map |
-| `rejected` | Not good enough — not shown |
-| `needs_revision` | Sent back for more info |
-| `failed` | An agent hit an error |
+**Relationships:**
+- `incident_analysis` (1:1) — Classification, scoring, and cleaned content
+- `incident_queue` (1:1) — Workflow status and agent locking
+- `incident_locations` (1:1) — Geographic coordinates
+- `incident_decisions` (1:1) — Final decision and report status
+- `incident_agent_messages` (1:N) — Log of all agent activities
 
 **Available functions:**
 
@@ -594,26 +594,178 @@ append_agent_note(incident_id: str, note: str, existing_notes: list) -> dict
 
 ---
 
-### 6.3 Agent Feedback Table
+### 6.3 Incident Queue Table
+
+**File:** `backend/db/incidents.py` (in queue management) | **Table:** `incident_queue`
+
+Tracks workflow state, agent processing, and row locking to prevent concurrent modifications.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `incident_id` | uuid | PRIMARY KEY, FK | References `incidents.incident_id` |
+| `status` | enum | NOT NULL, DEFAULT `'raw'` | Workflow stage: `raw`, `queued`, `in_progress`, `candidate`, `classified`, `published`, `rejected`, `needs_revision`, `failed` |
+| `current_agent` | enum | NULL | Which agent is currently processing this |
+| `next_agent` | enum | NULL | Which agent will process this next |
+| `retry_count` | integer | NOT NULL, DEFAULT 0 | Number of failed attempts |
+| `max_attempts` | integer | NOT NULL, DEFAULT 3 | Maximum retry limit before forced reject |
+| `available_at` | timestamptz | NOT NULL, DEFAULT now() | When this incident becomes available for processing |
+| `locked_by` | text | NULL | Name of agent that currently holds the lock |
+| `locked_at` | timestamptz | NULL | Timestamp when the lock was acquired |
+| `last_error` | text | NULL | Error message from most recent failure |
+| `updated_at` | timestamptz | NOT NULL, DEFAULT now() | Last status update |
+
+**Status values:**
+
+| Status | Meaning |
+|---|---|
+| `raw` | Just saved, not yet processed |
+| `queued` | Ready for the next agent |
+| `in_progress` | An agent currently holds a lock on it |
+| `candidate` | Crawler approved it as a valid incident |
+| `classified` | Classifier has scored it |
+| `published` | Approved — shows on the map |
+| `rejected` | Not good enough — not shown |
+| `needs_revision` | Sent back for more info (max 2 retries) |
+| `failed` | An agent encountered an error |
+
+---
+
+### 6.4 Incident Analysis Table
+
+**File:** `backend/agents/langchain/classifier.py` | **Table:** `incident_analysis`
+
+Stores the output from the classification pipeline: cleaned content, category, scores, and extracted data.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `incident_id` | uuid | PRIMARY KEY, FK | References `incidents.incident_id` |
+| `cleaned_content` | text | NULL | Clean, formal summary from Cleaner Agent (1–2 sentences) |
+| `topic_bucket` | enum | NULL | Categorized topic: `singapore_news`, `singapore_viral`, or `other` |
+| `topic_similarity_score` | numeric | NULL | Confidence (0.0–1.0) that this matches the topic |
+| `category` | enum | NULL | Crime category: `theft`, `attempted_theft`, `vandalism`, `suspicious_activity`, `harassment` |
+| `authenticity_score` | numeric | NULL | Confidence (0.0–1.0) this is a real incident, not a joke |
+| `severity` | numeric | NULL | Severity (0.0–1.0): 0 = minor, 1 = critical |
+| `category_score` | numeric | NULL | Confidence (0.0–1.0) that the category assignment is correct |
+| `extracted_entities` | jsonb | DEFAULT `{}` | Structured fields: location, people, items, times |
+| `candidate_scores` | jsonb | NULL | Scores for each candidate category |
+| `matched_signals` | jsonb | NULL | Which scoring rubric signals matched |
+| `classified_at` | timestamptz | DEFAULT now() | Classification timestamp |
+
+**Scoring rubric (for authenticity_score):**
+
+| Factor | Weight | What it checks |
+|---|---|---|
+| Detail (location, time, action, person) | 25% | Specific and concrete information |
+| Evidence (first-hand, clear, media) | 25% | Quality of supporting evidence |
+| Consistency (no contradictions) | 15% | Aligned fields, no exaggeration |
+| Risk flags (rumours, missing data, ragebait) | −5% | Deductions for red flags |
+
+**Formula:** `authenticity = (0.25 × detail) + (0.25 × evidence) + (0.15 × consistency) − (0.05 × risk)`
+
+---
+
+### 6.5 Incident Decisions Table
+
+**File:** `backend/agents/langchain/decider.py` | **Table:** `incident_decisions`
+
+Stores the final decision made by the Decision Agent and any reasoning.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `incident_id` | uuid | PRIMARY KEY, FK | References `incidents.incident_id` |
+| `decision` | enum | NOT NULL | Final decision: `publish`, `needs_revision`, `reject` |
+| `decision_reason` | text | NULL | LLM-generated explanation for the decision |
+| `report_status` | enum | DEFAULT `'unknown'` | Report processing status: `unknown`, `pending`, `confirmed`, `dismissed` |
+| `decided_at` | timestamptz | DEFAULT now() | Decision timestamp |
+
+**Decision logic:**
+
+- If `authenticity_score >= 0.7` AND `category` is known → `publish`
+- Else if `retry_count < 2` → `needs_revision`
+- Else → `reject`
+
+---
+
+### 6.6 Incident Locations Table
+
+**File:** `backend/agents/cleaner/cleaner_agent.py` | **Table:** `incident_locations`
+
+Stores geographic data extracted and geocoded by the Cleaner Agent.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `incident_id` | uuid | PRIMARY KEY, FK | References `incidents.incident_id` |
+| `location_text` | text | NULL | Normalised place name (e.g. "Ang Mo Kio MRT", "Tampines Block 542") |
+| `latitude` | double precision | NULL | GPS latitude (Singapore range: ~1.1–1.5) |
+| `longitude` | double precision | NULL | GPS longitude (Singapore range: ~103.6–104.1) |
+
+**Notes:**
+- Set by the Cleaner Agent during text processing
+- If geocoding fails, both lat/lng are NULL
+- Frontend uses these coordinates to place pins on the map
+
+---
+
+### 6.7 Incident Agent Messages Table
+
+**File:** `backend/agents/langchain/` | **Table:** `incident_agent_messages`
+
+Complete audit log of every agent's work on each incident. Used for transparency and debugging.
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | uuid | PRIMARY KEY | Auto-generated message ID |
+| `incident_id` | uuid | NOT NULL, FK | References `incidents.incident_id` |
+| `agent` | enum | NOT NULL | Which agent created this message: `crawler`, `cleaner`, `classifier`, `decision_agent` |
+| `sequence_order` | smallint | NOT NULL | Order in the processing pipeline (1, 2, 3, …) |
+| `attempt` | smallint | DEFAULT 1 | Attempt number if the incident was retried |
+| `message_type` | text | NOT NULL | `status_update`, `note`, `error`, `output`, etc. |
+| `summary` | text | NULL | Short message or note (shown in UI as `note` for backward compatibility) |
+| `reasoning` | text | NULL | Detailed reasoning from LLM |
+| `llm_raw_output` | text | NULL | Unprocessed LLM response |
+| `category_assigned` | text | NULL | Category picked by this agent |
+| `category_score` | numeric | NULL | Confidence in the category |
+| `authenticity_level` | text | NULL | `high`, `medium`, `low` |
+| `authenticity_score` | numeric | NULL | Numeric score (0.0–1.0) |
+| `severity_level` | text | NULL | `critical`, `high`, `medium`, `low` |
+| `severity_score` | numeric | NULL | Numeric score (0.0–1.0) |
+| `decision_made` | text | NULL | Decision output from Decision Agent |
+| `decision_instruction` | text | NULL | Instructions based on the decision |
+| `decision_reason` | text | NULL | Why this decision was made |
+| `classifier_review` | text | NULL | Classifier's review notes |
+| `metadata` | jsonb | DEFAULT `{}` | Arbitrary agent-specific data |
+| `created_at` | timestamptz | NOT NULL, DEFAULT now() | Message creation timestamp |
+
+**Notes:**
+- Each row represents one discrete step in processing
+- The `incident_full` view aggregates all messages for an incident into one JSONB array
+- For backward compatibility, `summary` is aliased as `note` in the view
+
+---
+
+### 6.8 Agent Feedback Table
 
 **File:** `backend/db/feedback.py` | **Table:** `agent_feedback`
 
-Stores messages that agents send to each other when they need more info.
+Stores inter-agent communication: one agent requesting another to revise work or provide more information.
 
-| Column | Type | Description |
-|---|---|---|
-| `id` | uuid | Auto-generated |
-| `incident_id` | uuid | Which incident this is about |
-| `from_agent` | text | Who sent it (`"classifier"`, `"decision_agent"`, etc.) |
-| `to_agent` | text | Who should read it |
-| `feedback_type` | text | Short code (e.g. `"location_unclear"`) |
-| `reason` | text | Why this feedback was sent |
-| `requested_action` | text | What the receiving agent should do |
-| `priority` | text | `"low"`, `"medium"`, or `"high"` |
-| `resolved` | boolean | Has the receiving agent acted on it? |
 
-**Feedback type codes:**  
-`location_unclear` · `time_missing` · `source_weak` · `text_too_vague` · `possible_duplicate` · `authenticity_too_low` · `category_conflict` · `severity_unclear` · `source_metadata_missing`
+
+| Column | Type | Constraints | Description |
+|---|---|---|---|
+| `id` | uuid | PRIMARY KEY | Auto-generated feedback message ID |
+| `incident_id` | uuid | NOT NULL, FK | References `incidents.incident_id` |
+| `from_agent` | enum | NOT NULL | Sending agent: `crawler`, `cleaner`, `classifier`, `decision_agent` |
+| `to_agent` | enum | NOT NULL | Receiving agent |
+| `feedback_type` | text | NOT NULL | Code: `location_unclear`, `time_missing`, `source_weak`, `text_too_vague`, `possible_duplicate`, `authenticity_too_low`, `category_conflict`, `severity_unclear`, `source_metadata_missing` |
+| `reason` | text | NOT NULL | Human-readable explanation |
+| `requested_action` | text | NULL | What the receiving agent should do |
+| `context_snapshot` | jsonb | DEFAULT `{}` | Snapshot of incident state when feedback was sent |
+| `priority` | text | DEFAULT `'normal'` | Urgency: `low`, `normal`, `high`, `urgent` |
+| `resolved` | boolean | DEFAULT false | Has the receiving agent acted on this? |
+| `resolved_at` | timestamptz | NULL | When it was resolved |
+| `resolved_by` | text | NULL | Which agent or process resolved it |
+| `created_at` | timestamptz | DEFAULT now() | Feedback creation timestamp |
 
 **Available functions:**
 
@@ -626,30 +778,51 @@ mark_feedback_resolved(feedback_id: str) -> dict
 
 ---
 
-### 6.4 Mock Official Reports Table
+### 6.9 Incident Full View
 
-**File:** `backend/db/mock_reports.py` | **Table:** `mock_official_reports`
+**File:** `supabase/incident_full.sql` | **View:** `incident_full`
 
-Stands in for real SPF / CNA / Straits Times records. The classifier checks these to avoid publishing incidents that are already officially reported.
+Pre-joined view that combines all related tables for easy querying. Used by the frontend API and reporting.
 
-| Column | Type | Description |
-|---|---|---|
-| `id` | uuid | Auto-generated |
-| `title` | text | Short headline |
-| `description` | text | Full description |
-| `category` | text | Crime type |
-| `location_text` | text | Place name |
-| `latitude` / `longitude` | float | Coordinates |
-| `source` | text | `"SPF"`, `"CNA"`, `"Straits Times"` |
+**Purpose:** Fetch a complete incident record with all analysis, decisions, and messages without requiring multiple joins.
 
-**Available functions:**
+**Source tables joined:**
+- `incidents` (core identity and source data)
+- `incident_queue` (workflow state)
+- `incident_analysis` (classification results)
+- `incident_locations` (geographic data)
+- `incident_decisions` (final decision)
+- `incident_agent_messages` (aggregated as JSONB array)
+
+**Result columns:** All columns from the source tables, plus:
+- `agent_messages` (jsonb array) — All messages for this incident, in sequence order
+
+**Usage example:**
 
 ```python
-get_all_mock_reports() -> list[dict]
-find_similar_official_report(category: str, location_text: str) -> dict | None
-insert_mock_report(data: dict) -> dict
-seed_mock_reports(reports: list[dict]) -> list[dict]
+# Instead of this:
+core = db.query("SELECT * FROM incidents WHERE id = ?", id)
+queue = db.query("SELECT * FROM incident_queue WHERE id = ?", id)
+analysis = db.query("SELECT * FROM incident_analysis WHERE id = ?", id)
+
+# Use this:
+full = db.query("SELECT * FROM incident_full WHERE incident_id = ?", id)
 ```
+
+---
+
+### 6.10 Deprecated: Mock Official Reports Table
+
+> ⚠️ **Deprecated** — not found in current schema
+
+**Former file:** `backend/db/mock_reports.py` | **Former table:** `mock_official_reports`
+
+This table was used in early prototypes to simulate official police/news records for deduplication. It is no longer present in the current Supabase schema (`supabase/new_tables.sql`).
+
+If you need to use this functionality in the future:
+1. Define the table schema in Supabase
+2. Restore the Python functions in `backend/db/mock_reports.py`
+3. Wire it back into the classifier LLM prompt
 
 ---
 
@@ -1132,3 +1305,7 @@ All agents follow these rules, enforced via LLM system prompts:
 5. **Low-confidence reports are held or rejected.** Posts below the threshold go to `needs_revision` or `rejected` — not the map.
 6. **Max 2 retries.** After 2 revision cycles, an uncertain incident is rejected rather than kept alive.
 7. **The map shows patterns, not accusations.** Pins represent community reports, not police records.
+
+---
+
+> **Last synced from supabase/ on:** May 1, 2026

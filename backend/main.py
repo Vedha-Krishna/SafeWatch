@@ -270,7 +270,7 @@ def list_incidents_from_database(
         default=None,
         description=(
             "Filter by status. Options: raw, candidate, classified, "
-            "published, rejected, merged, needs_revision. "
+            "processed, rejected, merged, needs_revision. "
             "Leave empty to get all statuses."
         )
     ),
@@ -483,7 +483,7 @@ class _PipelineRunRequest(BaseModel):
 
 
 _DECISION_TO_STATUS = {
-    "publish": "published",
+    "publish": "processed",
     "reject": "rejected",
     "needs_revision": "needs_revision",
 }

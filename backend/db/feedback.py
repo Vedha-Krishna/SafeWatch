@@ -44,6 +44,37 @@ from .supabase import get_supabase_client
 # The name of the table in our Supabase database
 FEEDBACK_TABLE = "agent_feedback"
 
+_AGENT_ROLE_ALIASES = {
+    "crawler": "crawler",
+    "cleaner": "cleaner",
+    "classifier": "classifier",
+    "decision": "decision_agent",
+    "decider": "decision_agent",
+    "decision_agent": "decision_agent",
+}
+
+_PRIORITY_ALIASES = {
+    "low": "low",
+    "medium": "normal",
+    "normal": "normal",
+    "high": "high",
+    "urgent": "urgent",
+}
+
+
+def _normalise_agent_role(value: object) -> str:
+    role = str(value or "").strip().lower().replace(" ", "_")
+    if role in _AGENT_ROLE_ALIASES:
+        return _AGENT_ROLE_ALIASES[role]
+    raise ValueError(f"Invalid agent role for agent_feedback: {value!r}")
+
+
+def _normalise_priority(value: object) -> str:
+    priority = str(value or "normal").strip().lower()
+    if priority in _PRIORITY_ALIASES:
+        return _PRIORITY_ALIASES[priority]
+    raise ValueError(f"Invalid agent_feedback.priority: {value!r}")
+
 
 # -----------------------------------------------------------------------
 # CREATE — Send a new feedback message between agents
@@ -88,11 +119,15 @@ def insert_feedback(feedback_data: dict) -> dict:
         print(f"Feedback sent with ID: {feedback['id']}")
     """
     client = get_supabase_client()
+    payload = dict(feedback_data)
+    payload["from_agent"] = _normalise_agent_role(payload.get("from_agent"))
+    payload["to_agent"] = _normalise_agent_role(payload.get("to_agent"))
+    payload["priority"] = _normalise_priority(payload.get("priority"))
 
     response = (
         client
         .table(FEEDBACK_TABLE)
-        .insert(feedback_data)
+        .insert(payload)
         .execute()
     )
 
@@ -178,7 +213,7 @@ def get_unresolved_feedback(to_agent: str | None = None) -> list[dict]:
 
     # If a specific agent was requested, add that filter too
     if to_agent is not None:
-        query = query.eq("to_agent", to_agent)
+        query = query.eq("to_agent", _normalise_agent_role(to_agent))
 
     # Oldest first so agents process tasks in the order they were received
     response = query.order("created_at", desc=False).execute()

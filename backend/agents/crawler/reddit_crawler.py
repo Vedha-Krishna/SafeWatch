@@ -374,17 +374,52 @@ def to_incident_payload(
 
 
 def upload_to_supabase(payloads: list[dict], supabase: Any | None = None) -> int:
-    """Upsert incident payloads into Supabase using dedupe_key conflict handling."""
+    """Upsert incident payloads into Supabase using dedupe_key conflict handling.
+
+    Splits each payload across the normalised tables:
+      - core fields  → incidents      (conflict on dedupe_key)
+      - status field → incident_queue (conflict on incident_id, skip if already queued)
+    """
     if not payloads:
         return 0
 
     client = supabase or get_supabase_client()
     inserted = 0
 
+    # Columns that belong to incident_queue, not incidents
+    _QUEUE_COLS = {"status", "locked_by", "locked_at", "retry_count", "last_error",
+                   "current_agent", "next_agent", "available_at", "max_attempts"}
+
     for payload in payloads:
+        queue_fields = {k: v for k, v in payload.items() if k in _QUEUE_COLS}
+        incident_fields = {k: v for k, v in payload.items() if k not in _QUEUE_COLS}
+
+        # Upsert the core incident row (do nothing on duplicate dedupe_key)
         client.table("incidents").upsert(
-            payload,
+            incident_fields,
             on_conflict="dedupe_key",
+            ignore_duplicates=True,
+        ).execute()
+
+        # Re-fetch the incident_id by dedupe_key — ignore_duplicates upsert
+        # does not return data even when a row is inserted (PostgREST limitation)
+        lookup = (
+            client.table("incidents")
+            .select("incident_id")
+            .eq("dedupe_key", incident_fields["dedupe_key"])
+            .maybe_single()
+            .execute()
+        )
+        if not lookup.data:
+            print(f"Warning: could not find incident after upsert for dedupe_key={incident_fields.get('dedupe_key')}")
+            continue
+
+        incident_id = lookup.data["incident_id"]
+        queue_fields.setdefault("status", "queued")
+        queue_fields["incident_id"] = incident_id
+        client.table("incident_queue").upsert(
+            queue_fields,
+            on_conflict="incident_id",
             ignore_duplicates=True,
         ).execute()
         inserted += 1

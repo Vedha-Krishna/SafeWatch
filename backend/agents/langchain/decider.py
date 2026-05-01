@@ -15,7 +15,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _DECISION_TO_STATUS = {
-    "publish": "published",
+    "publish": "processed",
     "reject": "rejected",
     "needs_revision": "needs_revision",
 }
@@ -38,13 +38,16 @@ def decision_node(state: IncidentState) -> dict[str, Any]:
     if is_supabase_configured():
         try:
             record = {
-                "source_platform": "langgraph_pipeline",
+                "source_platform": "other",
                 "raw_text": state["raw_text"],
-                "status": _DECISION_TO_STATUS.get(decision, decision),
-                "decision": decision,
-                "category": state["category"],
+                # status → incident_queue; decision → incident_decisions
+                # category/authenticity_score → incident_analysis
+                # agent_notes → incident_agent_messages rows
+                "status":            _DECISION_TO_STATUS.get(decision, decision),
+                "decision":          decision,
+                "category":          state["category"],
                 "authenticity_score": state["authenticity_score"],
-                "agent_notes": state["notes"],
+                "agent_notes":       state["notes"],
             }
             insert_incident(record)
         except Exception as exc:

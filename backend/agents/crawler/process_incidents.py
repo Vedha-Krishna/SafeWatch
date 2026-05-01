@@ -6,12 +6,34 @@ from dotenv import load_dotenv
 from supabase import create_client
 
 try:
-    from orchestration12 import run_pipeline_for_1_post
+    from .orchestration12 import run_pipeline_for_1_post
 except ImportError:
-    from agents.crawler.orchestration12 import run_pipeline_for_1_post
+    try:
+        from backend.agents.crawler.orchestration12 import run_pipeline_for_1_post
+    except ImportError:
+        try:
+            from agents.crawler.orchestration12 import run_pipeline_for_1_post
+        except ImportError:
+            from orchestration12 import run_pipeline_for_1_post
 
 
 load_dotenv()
+
+
+AGENT_ROLE_ALIASES = {
+    "crawler": "crawler",
+    "cleaner": "cleaner",
+    "classifier": "classifier",
+    "decision": "decision_agent",
+    "decision_agent": "decision_agent",
+}
+
+
+def normalize_agent_role(value: Any) -> str:
+    role = str(value or "").strip().lower().replace(" ", "_")
+    if role in AGENT_ROLE_ALIASES:
+        return AGENT_ROLE_ALIASES[role]
+    raise ValueError(f"Invalid agent role for incident_agent_messages.agent: {value!r}")
 
 
 def get_supabase_client() -> Any:
@@ -25,12 +47,13 @@ def get_supabase_client() -> Any:
 
 
 def fetch_queued_incidents(supabase: Any, limit: Optional[int] = None) -> list[dict]:
+    # Read cleaned rows, including partial retries where a previous failed run
+    # wrote analysis/decision fields but did not advance the queue status.
     query = (
-        supabase.table("incidents")
+        supabase.table("incident_full")
         .select("*")
-        .eq("status", "queued")
+        .eq("status", "cleaned")
         .not_.is_("cleaned_content", "null")
-        .is_("category", "null")
         .order("created_at", desc=False)
     )
 
@@ -43,44 +66,69 @@ def fetch_queued_incidents(supabase: Any, limit: Optional[int] = None) -> list[d
 
 def db_row_to_pipeline_input(row: dict) -> dict:
     return {
-        "incident_id": row["incident_id"],
+        "incident_id":    row["incident_id"],
         "source_platform": row["source_platform"],
-        "source_url": row["source_url"],
-        "raw_text": row["raw_text"],
-
+        "source_url":     row["source_url"],
+        "raw_text":       row["raw_text"],
         "cleaned_content": row.get("cleaned_content"),
-        "topic_bucket": row.get("topic_bucket"),
-        "location_text": row.get("location_text"),
-        "action_text": row.get("action_text"),
+        "topic_bucket":   row.get("topic_bucket"),
+        "location_text":  row.get("location_text"),
         "normalized_time": row.get("normalized_time"),
     }
 
 
-def update_incident_after_pipeline(supabase: Any, row_id: int, result: dict) -> None:
-    location_text = result.get("location_text") or result.get("location")
-    action_text = result.get("action_text") or result.get("action")
+def update_incident_after_pipeline(supabase: Any, incident_id: str, result: dict) -> None:
+    location_text   = result.get("location_text") or result.get("location")
     normalized_time = result.get("normalized_time") or result.get("timestamp_text")
 
-    update_payload = {
-        "category": result["category"],
-        "category_score": result.get("category_score"),
+    # Write classifier output to incident_analysis
+    supabase.table("incident_analysis").upsert({
+        "incident_id":       incident_id,
+        "category":          result["category"],
+        "category_score":    result.get("category_score"),
         "authenticity_score": result["authenticity_score"],
-        "severity": result["severity"],
-        "location_text": location_text,
-        "timestamp_text": normalized_time,
-        "normalized_time": normalized_time,
-        "action_text": action_text,
-        "decision": result["decision"],
-        "agent_messages": json.dumps(result["messages"], ensure_ascii=False),
-        "status": "processed",
-    }
+        "severity":          result["severity"],
+    }).execute()
 
-    (
-        supabase.table("incidents")
-        .update(update_payload)
-        .eq("id", row_id)
-        .execute()
-    )
+    # Write location to incident_locations (only if present)
+    if location_text:
+        supabase.table("incident_locations").upsert({
+            "incident_id":  incident_id,
+            "location_text": location_text,
+        }).execute()
+
+    # Write decision to incident_decisions
+    supabase.table("incident_decisions").upsert({
+        "incident_id": incident_id,
+        "decision":    result["decision"],
+    }).execute()
+
+    # Write agent messages to incident_agent_messages (one row per message)
+    messages = result.get("messages") or []
+    for seq, msg in enumerate(messages):
+        supabase.table("incident_agent_messages").insert({
+            "incident_id":    incident_id,
+            "agent":          normalize_agent_role(msg.get("agent")),
+            "sequence_order": seq,
+            "message_type":   msg.get("type", "note"),
+            "summary":        msg.get("note") or msg.get("content") or "",
+            "reasoning":      msg.get("reasoning") or msg.get("llm_reasoning"),
+            "decision_reason": msg.get("decision_reason"),
+            "metadata":       {k: v for k, v in msg.items()
+                               if k not in {"agent", "type", "note", "content",
+                                            "reasoning", "llm_reasoning", "decision_reason"}},
+        }).execute()
+
+    # Update normalized_time on the core incidents row if available
+    if normalized_time:
+        supabase.table("incidents").update(
+            {"normalized_time": normalized_time, "timestamp_text": normalized_time}
+        ).eq("incident_id", incident_id).execute()
+
+    # Advance queue status to processed
+    supabase.table("incident_queue").update(
+        {"status": "processed"}
+    ).eq("incident_id", incident_id).execute()
 
 
 def process_queued_incidents(max_incidents: Optional[int] = None) -> dict[str, int]:
@@ -122,17 +170,17 @@ def process_queued_incidents(max_incidents: Optional[int] = None) -> dict[str, i
 
             print("-" * 40)
 
-            update_incident_after_pipeline(supabase, row["id"], result)
+            update_incident_after_pipeline(supabase, row["incident_id"], result)
 
             print(
-                f"Processed incident id={row['id']} | "
+                f"Processed incident id={row['incident_id']} | "
                 f"decision={result['decision']} | "
                 f"category={result['category']}"
             )
             stats["processed"] += 1
 
         except Exception as exc:
-            print(f"Failed to process incident id={row.get('id')}: {exc}")
+            print(f"Failed to process incident id={row.get('incident_id')}: {exc}")
             stats["failed"] += 1
 
     return stats
