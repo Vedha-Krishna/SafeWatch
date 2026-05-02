@@ -87,16 +87,15 @@ def get_openai_client() -> "OpenAI":
 
 
 def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
-    """Claim one uncleaned queued incident and lock it so other workers skip it."""
+    """Claim one queued incident from incident_queue and lock it so other workers skip it."""
     now_iso = datetime.now(ZoneInfo("UTC")).isoformat()
+    # Select from incident_queue; embed incidents(...) to get raw_text and metadata
     response = (
-        supabase.table("incidents")
-        .select("incident_id, raw_text, status, cleaned_content, source_platform, normalized_time")
+        supabase.table("incident_queue")
+        .select("incident_id, status, locked_by, incidents(incident_id, raw_text, source_platform, normalized_time)")
         .eq("status", "queued")
-        .is_("cleaned_content", "null")
         .is_("locked_by", "null")
-        # .lte("available_at", now_iso)
-        .order("created_at", desc=False)
+        .order("available_at", desc=False)
         .limit(25)
         .execute()
     )
@@ -105,8 +104,8 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
     if not candidates:
         return None
 
-    for incident in candidates:
-        incident_id = incident.get("incident_id")
+    for row in candidates:
+        incident_id = row.get("incident_id")
         if not incident_id:
             continue
 
@@ -116,17 +115,25 @@ def fetch_and_lock_incident(supabase: Any) -> dict[str, Any] | None:
             "locked_at": now_iso,
         }
         lock_response = (
-            supabase.table("incidents")
+            supabase.table("incident_queue")
             .update(lock_payload)
             .eq("incident_id", incident_id)
             .eq("status", "queued")
-            .is_("cleaned_content", "null")
             .is_("locked_by", "null")
             .execute()
         )
 
         if lock_response.data:
-            return incident
+            # Flatten the embedded incidents sub-object into a single dict
+            incident_core = row.get("incidents") or {}
+            return {
+                "incident_id":     incident_id,
+                "raw_text":        incident_core.get("raw_text"),
+                "source_platform": incident_core.get("source_platform"),
+                "normalized_time": incident_core.get("normalized_time"),
+                "status":          row.get("status"),
+                "cleaned_content": None,
+            }
 
     return None
 
@@ -196,31 +203,48 @@ def update_and_handoff(
     cleaned_incident: CleanedIncident,
     source_platform: str | None = None,
     existing_normalized_time: Any = None,
+    next_status: str = "cleaned",
 ) -> None:
     normalized_time = choose_normalized_time(
         source_platform=source_platform,
         existing_normalized_time=existing_normalized_time,
         cleaned_normalized_time=cleaned_incident.normalized_time,
     )
-    update_payload = {
+
+    # Write analysis fields to incident_analysis (upsert in case row already exists)
+    supabase.table("incident_analysis").upsert({
+        "incident_id":    incident_id,
         "cleaned_content": cleaned_incident.cleaned_content,
-        "action_text": cleaned_incident.action_text,
-        "topic_bucket": cleaned_incident.topic_bucket,
-        "location_text": cleaned_incident.location_text,
-        "latitude": cleaned_incident.latitude,
-        "longitude": cleaned_incident.longitude,
-        "normalized_time": normalized_time,
-        "status": "queued",
+        "topic_bucket":   cleaned_incident.topic_bucket,
+    }).execute()
+
+    # Write location fields to incident_locations (upsert)
+    if any([cleaned_incident.location_text, cleaned_incident.latitude, cleaned_incident.longitude]):
+        supabase.table("incident_locations").upsert({
+            "incident_id":  incident_id,
+            "location_text": cleaned_incident.location_text,
+            "latitude":     cleaned_incident.latitude,
+            "longitude":    cleaned_incident.longitude,
+        }).execute()
+
+    # Update normalized_time on the core incidents row if we have one
+    if normalized_time:
+        supabase.table("incidents").update(
+            {"normalized_time": normalized_time}
+        ).eq("incident_id", incident_id).execute()
+
+    # Release lock and advance queue status
+    supabase.table("incident_queue").update({
+        "status":    next_status,
         "locked_by": None,
         "locked_at": None,
-    }
-    supabase.table("incidents").update(update_payload).eq("incident_id", incident_id).execute()
+    }).eq("incident_id", incident_id).execute()
 
 
 def mark_failed(supabase: Any, incident_id: Any, _error_message: str) -> None:
-    supabase.table("incidents").update(
+    supabase.table("incident_queue").update(
         {
-            "status": "failed",
+            "status":    "failed",
             "locked_by": None,
             "locked_at": None,
             "last_error": _error_message[:1000],
@@ -247,6 +271,22 @@ def run_once() -> bool:
 
     try:
         cleaned_incident = clean_with_llm(openai_client, raw_text)
+
+        # Reject non-crime posts before they reach the classifier.
+        # Only singapore_news posts are worth running the full pipeline on.
+        if cleaned_incident.topic_bucket != "singapore_news":
+            supabase.table("incident_queue").update({
+                "status":    "rejected",
+                "locked_by": None,
+                "locked_at": None,
+                "last_error": f"Filtered by cleaner: topic_bucket={cleaned_incident.topic_bucket}",
+            }).eq("incident_id", incident_id).execute()
+            print(
+                f"Incident {incident_id} rejected by cleaner "
+                f"(topic_bucket={cleaned_incident.topic_bucket})."
+            )
+            return True
+
         update_and_handoff(
             supabase,
             incident_id,

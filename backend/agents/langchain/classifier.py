@@ -13,10 +13,10 @@ def classifier_node(state: IncidentState) -> dict[str, Any]:
         authenticity_score = 0.78
     elif any(keyword in text for keyword in ("vandal", "graffiti", "spray paint")):
         category = "vandalism"
-        authenticity_score = 0.64
+        authenticity_score = 0.72
     elif any(keyword in text for keyword in ("harass", "threat", "intimidat")):
         category = "harassment"
-        authenticity_score = 0.66
+        authenticity_score = 0.71
     else:
         category = "unknown"
         authenticity_score = 0.35

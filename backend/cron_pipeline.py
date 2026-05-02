@@ -53,38 +53,42 @@ def run_crawler_step() -> dict[str, Any]:
     supabase = reddit_crawler.get_supabase_client()
     latest_reddit_id = reddit_crawler.get_latest_reddit_id(supabase)
 
-    payloads, stats = reddit_crawler.crawl_reddit_posts(
-        subreddit_name=os.getenv("REDDIT_SUBREDDIT", reddit_crawler.DEFAULT_SUBREDDIT),
-        limit=_int_env(
-            "CRON_CRAWLER_LIMIT",
-            reddit_crawler.DEFAULT_INCREMENTAL_LIMIT,
-            minimum=1,
-        ),
-        user_agent=os.getenv("REDDIT_USER_AGENT", reddit_crawler.DEFAULT_USER_AGENT),
-        latest_reddit_id=latest_reddit_id,
-        include_comments=_bool_env("CRON_INCLUDE_COMMENTS", default=False),
-        comment_limit=_int_env(
-            "CRON_COMMENT_LIMIT",
-            reddit_crawler.DEFAULT_COMMENT_LIMIT,
-            minimum=1,
-        ),
-        request_delay=_float_env(
-            "CRON_REDDIT_REQUEST_DELAY",
-            reddit_crawler.DEFAULT_REQUEST_DELAY,
-        ),
-        max_retries=_int_env(
-            "CRON_REDDIT_MAX_RETRIES",
-            reddit_crawler.DEFAULT_MAX_RETRIES,
-        ),
-    )
+    # Support comma-separated subreddits: REDDIT_SUBREDDIT=mocknews,mockpostsforNBT
+    raw_subreddits = os.getenv("REDDIT_SUBREDDIT", reddit_crawler.DEFAULT_SUBREDDIT)
+    subreddits = [s.strip() for s in raw_subreddits.split(",") if s.strip()]
 
-    upserted = reddit_crawler.upload_to_supabase(payloads, supabase=supabase)
+    limit = _int_env("CRON_CRAWLER_LIMIT", reddit_crawler.DEFAULT_INCREMENTAL_LIMIT, minimum=1)
+    user_agent = os.getenv("REDDIT_USER_AGENT", reddit_crawler.DEFAULT_USER_AGENT)
+    include_comments = _bool_env("CRON_INCLUDE_COMMENTS", default=False)
+    comment_limit = _int_env("CRON_COMMENT_LIMIT", reddit_crawler.DEFAULT_COMMENT_LIMIT, minimum=1)
+    request_delay = _float_env("CRON_REDDIT_REQUEST_DELAY", reddit_crawler.DEFAULT_REQUEST_DELAY)
+    max_retries = _int_env("CRON_REDDIT_MAX_RETRIES", reddit_crawler.DEFAULT_MAX_RETRIES)
+
+    all_payloads: list[dict] = []
+    combined_stats: dict[str, Any] = {}
+
+    for subreddit in subreddits:
+        payloads, stats = reddit_crawler.crawl_reddit_posts(
+            subreddit_name=subreddit,
+            limit=limit,
+            user_agent=user_agent,
+            latest_reddit_id=latest_reddit_id,
+            include_comments=include_comments,
+            comment_limit=comment_limit,
+            request_delay=request_delay,
+            max_retries=max_retries,
+        )
+        all_payloads.extend(payloads)
+        combined_stats[subreddit] = stats
+
+    upserted = reddit_crawler.upload_to_supabase(all_payloads, supabase=supabase)
 
     return {
+        "subreddits": subreddits,
         "latest_reddit_id": latest_reddit_id,
-        "candidate_payloads": len(payloads),
+        "candidate_payloads": len(all_payloads),
         "upserted": upserted,
-        "stats": stats,
+        "stats_by_subreddit": combined_stats,
     }
 
 
@@ -148,3 +152,9 @@ def run_safewatch_pipeline() -> dict[str, Any]:
             "process_incidents_and_decider": process_incidents_result,
         },
     }
+
+
+if __name__ == "__main__":
+    import json
+    result = run_safewatch_pipeline()
+    print(json.dumps(result, indent=2))

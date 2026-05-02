@@ -233,7 +233,7 @@ def build_decision_message(
     )
 
     return {
-        "agent": "decision",
+        "agent": "decision_agent",
         "type": "decision_result",
         "attempt": attempt,
         "decision": decision,
@@ -557,7 +557,7 @@ Return ONLY JSON:
         state["retry_count"] += 1
 
         state["messages"].append({
-            "agent": "decision",
+            "agent": "decision_agent",
             "type": "classifier_feedback",
             "feedback_to": "classifier",
             "attempt": attempt,
